@@ -9,6 +9,53 @@ import { decrypt, encrypt } from "@/lib/crypto";
 
 export type ChannelActionResult = { error?: string; success?: string };
 
+export async function updateChannelTokenAction(
+  channelId: string,
+  accessToken: string,
+): Promise<ChannelActionResult> {
+  if (!accessToken || accessToken.length < 20) {
+    return { error: "Token inválido" };
+  }
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Unauthorized" };
+
+  const admin = createAdminClient();
+  const { data: ch } = await admin
+    .from("channels")
+    .select("type, external_id")
+    .eq("id", channelId)
+    .single();
+  if (!ch) return { error: "Canal no encontrado" };
+
+  // Quick probe: try the Graph API to confirm token works
+  try {
+    const probeUrl = `https://graph.facebook.com/v22.0/${ch.external_id}?access_token=${encodeURIComponent(accessToken)}`;
+    const probe = await fetch(probeUrl);
+    if (!probe.ok) {
+      return { error: `Token rechazado por Meta (${probe.status}). Verifica que sea del System User con los scopes correctos.` };
+    }
+  } catch (e) {
+    return { error: `No se pudo verificar el token: ${(e as Error).message}` };
+  }
+
+  const enc = encrypt(accessToken);
+  const { error } = await admin
+    .from("channels")
+    .update({
+      access_token_enc: enc.toString("base64"),
+      status: "connected",
+      last_verified_at: new Date().toISOString(),
+    })
+    .eq("id", channelId);
+  if (error) return { error: error.message };
+
+  revalidatePath("/settings/channels");
+  return { success: "ok" };
+}
+
 export async function deleteChannelAction(channelId: string): Promise<ChannelActionResult> {
   const supabase = await createClient();
   const {
