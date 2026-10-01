@@ -2,10 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 
 export async function GET(req: NextRequest) {
   const appId = process.env.NEXT_PUBLIC_META_APP_ID;
-  const redirectUri = process.env.NEXT_PUBLIC_META_REDIRECT_URI;
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+  const explicitRedirect = process.env.NEXT_PUBLIC_META_REDIRECT_URI;
   const configId = process.env.NEXT_PUBLIC_META_CONFIG_ID;
+
+  // Auto-derive redirect URI from NEXT_PUBLIC_APP_URL when not explicitly set
+  const redirectUri = explicitRedirect || (appUrl ? `${appUrl}/api/oauth/meta/callback` : "");
+
   if (!appId || !redirectUri) {
-    return new NextResponse("Meta OAuth env vars missing", { status: 500 });
+    return new NextResponse("META_APP_ID or NEXT_PUBLIC_APP_URL missing", { status: 500 });
   }
 
   const state = req.nextUrl.searchParams.get("state") ?? crypto.randomUUID();

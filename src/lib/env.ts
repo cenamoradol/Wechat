@@ -17,8 +17,10 @@ export const env = createEnv({
     NEXT_PUBLIC_SUPABASE_URL: z.string().url(),
     NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().min(1),
     NEXT_PUBLIC_META_APP_ID: z.string().min(1),
-    NEXT_PUBLIC_META_CONFIG_ID: z.string().min(1),
-    NEXT_PUBLIC_META_REDIRECT_URI: z.string().url(),
+    // Embedded Signup v4: opcional. Si no, usa OAuth básico.
+    NEXT_PUBLIC_META_CONFIG_ID: z.string().optional(),
+    // Si está vacío, se deriva de NEXT_PUBLIC_APP_URL.
+    NEXT_PUBLIC_META_REDIRECT_URI: z.string().url().optional(),
   },
   runtimeEnv: {
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
