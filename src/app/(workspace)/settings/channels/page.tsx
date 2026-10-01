@@ -8,6 +8,7 @@ import { formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
 import { ChannelRowActions } from "@/components/settings/channel-row-actions";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { MetaAssetsDebug } from "@/components/settings/meta-assets-debug";
 
 export default async function ChannelsPage({
   searchParams,
@@ -100,20 +101,33 @@ export default async function ChannelsPage({
 
       <Card>
         <CardHeader>
+          <CardTitle className="text-base">Diagnóstico · assets accesibles a tu app</CardTitle>
+          <CardDescription>
+            Usa esto para ver qué Pages, WABAs e Instagram Business Accounts puede ver tu token actual.
+            Si solo ves el "test WABA", tu System User no tiene acceso a tus assets reales.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <MetaAssetsDebug />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
           <CardTitle className="text-base">Debug · últimos eventos webhook</CardTitle>
           <CardDescription>
             Para verificar que Meta está enviando webhooks a tu app. Solo service_role puede leerlo.
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <WebhookEventsDebug userId={user.id} />
+          <WebhookEventsDebug />
         </CardContent>
       </Card>
     </div>
   );
 }
 
-async function WebhookEventsDebug({ userId }: { userId: string }) {
+async function WebhookEventsDebug() {
   const { createAdminClient } = await import("@/lib/supabase/admin");
   const admin = createAdminClient();
   const { data: events } = await admin
