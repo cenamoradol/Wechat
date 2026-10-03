@@ -77,41 +77,23 @@ export async function GET() {
 
   const GRAPH = "https://graph.facebook.com/v22.0";
 
-  // 1. Get app info via token debug
+  // 1. Validate token works at all by hitting /me
   try {
-    const debug = await fetch(`${GRAPH}/debug_token?input_token=${token}`, {
-      headers: { "access_token": `${expectedAppId}|${process.env.META_APP_SECRET}` },
-    });
-    if (debug.ok) {
-      const j = (await debug.json()) as {
-        data?: {
-          app_id?: string;
-          application?: string;
-          scopes?: string[];
-          type?: string;
-        };
-      };
-      const d = j.data;
-      if (d) {
-        result.scopes = d.scopes ?? [];
-        result.app_id_matches = d.app_id === expectedAppId;
-        result.warnings.push(
-          d.app_id !== expectedAppId
-            ? `⚠️ El token pertenece a otra app (${d.app_id}), no a la esperada (${expectedAppId}).`
-            : `✅ Token pertenece a esta app (${d.app_id}).`,
-        );
-        if ((d.scopes ?? []).length === 0) {
-          result.warnings.push(
-            "⚠️ El token no tiene scopes. Regenera el System User token con los 7 scopes listados abajo.",
-          );
-        }
-      }
-    } else {
-      const text = await debug.text();
-      result.warnings.push(`debug_token error: ${text}`);
+    const meRes = await fetch(`${GRAPH}/me?access_token=${encodeURIComponent(token)}`);
+    if (!meRes.ok) {
+      const text = await meRes.text();
+      result.warnings.push(
+        `❌ El token fue rechazado por Meta (${meRes.status}). Regenera el System User token. Detalle: ${text.slice(0, 150)}`,
+      );
+      return NextResponse.json(result);
     }
+    const me = (await meRes.json()) as { id?: string; name?: string };
+    result.warnings.push(
+      `✅ Token válido para Facebook ID ${me.id}${me.name ? ` (${me.name})` : ""}.`,
+    );
   } catch (e) {
-    result.warnings.push(`debug_token excepción: ${(e as Error).message}`);
+    result.warnings.push(`/me excepción: ${(e as Error).message}`);
+    return NextResponse.json(result);
   }
 
   // 2. List pages (/me/accounts)
@@ -131,33 +113,43 @@ export async function GET() {
     result.warnings.push(`/me/accounts excepción: ${(e as Error).message}`);
   }
 
-  // 3. List WABAs (/me/whatsapp_business_accounts)
+  // 3. List WABAs via /me/businesses?fields=owned_whatsapp_business_accounts
+  // The /me/whatsapp_business_accounts endpoint was deprecated.
   try {
     const r = await fetch(
-      `${GRAPH}/me/whatsapp_business_accounts?fields=id,name,phone_numbers{id,display_phone_number,verified_name}&access_token=${token}`,
+      `${GRAPH}/me/businesses?fields=id,name,owned_whatsapp_business_accounts{id,name,phone_numbers{id,display_phone_number,verified_name}}&access_token=${token}`,
     );
     if (r.ok) {
       const j = (await r.json()) as {
         data: Array<{
           id: string;
           name?: string;
-          phone_numbers?: Array<{
+          owned_whatsapp_business_accounts?: Array<{
             id: string;
-            display_phone_number?: string;
-            verified_name?: string;
+            name?: string;
+            phone_numbers?: Array<{
+              id: string;
+              display_phone_number?: string;
+              verified_name?: string;
+            }>;
           }>;
         }>;
       };
-      result.whatsapp_accounts = (j.data ?? []).map((w) => ({
-        id: w.id,
-        name: w.name ?? "(sin nombre)",
-        phone_numbers: (w.phone_numbers ?? []).map((p) => p.display_phone_number ?? p.id),
-      }));
+      result.bms = (j.data ?? []).map((b) => ({ id: b.id, name: b.name ?? b.id }));
+      for (const bm of j.data ?? []) {
+        for (const w of bm.owned_whatsapp_business_accounts ?? []) {
+          result.whatsapp_accounts.push({
+            id: w.id,
+            name: w.name ?? "(sin nombre)",
+            phone_numbers: (w.phone_numbers ?? []).map((p) => p.display_phone_number ?? p.id),
+          });
+        }
+      }
     } else {
-      result.warnings.push(`/me/whatsapp_business_accounts error: ${await r.text()}`);
+      result.warnings.push(`/me/businesses error: ${await r.text()}`);
     }
   } catch (e) {
-    result.warnings.push(`/me/whatsapp_business_accounts excepción: ${(e as Error).message}`);
+    result.warnings.push(`/me/businesses excepción: ${(e as Error).message}`);
   }
 
   // 4. List IG business accounts (via /me/accounts → instagram_business_account)
@@ -184,7 +176,7 @@ export async function GET() {
   // Final checklist
   if (result.pages.length === 0) {
     result.warnings.push(
-      "❌ No se listan páginas. Tu System User no admin ninguna página o no está en el mismo BM que las páginas.",
+      "❌ No se listan páginas. Tu System User no admin ninguna página o no está en el mismo BM.",
     );
   }
   if (result.instagram_business_accounts.length === 0) {
@@ -192,9 +184,16 @@ export async function GET() {
       "❌ No hay cuentas de Instagram Business accesibles. Vincula una IG Business/Creator a una de tus páginas.",
     );
   }
-  if (result.whatsapp_accounts.length <= 1) {
+  if (result.bms.length === 0) {
     result.warnings.push(
-      "⚠️ Solo 0-1 WABA visible. Tu WABA real puede estar en otro Business Manager.",
+      "❌ El token no tiene acceso a ningún Business Manager. Asigna tu System User a un BM en business.facebook.com/settings/users.",
+    );
+  } else {
+    result.warnings.push(`✅ Tu token tiene acceso a ${result.bms.length} Business Manager(s).`);
+  }
+  if (result.whatsapp_accounts.length === 0) {
+    result.warnings.push(
+      "❌ No hay WABAs visibles. Tu System User no tiene asignado el WABA real. Ve a business.facebook.com/settings/users → tu System User → Add Assets → WhatsApp Accounts.",
     );
   }
 

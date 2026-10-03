@@ -133,7 +133,7 @@ export function MetaAssetsDebug() {
 
           <ListSection
             title={`WhatsApp Business Accounts (${data.whatsapp_accounts.length})`}
-            emptyMessage="Ninguno. Tu System User no tiene acceso a ningún WABA en este BM."
+            emptyMessage="Ninguno visible desde este token. Tu System User no tiene asignado el WABA real."
             items={data.whatsapp_accounts.map((w) => ({
               id: w.id,
               primary: w.name,
@@ -141,6 +141,18 @@ export function MetaAssetsDebug() {
               tags: w.phone_numbers,
             }))}
           />
+
+          {data.bms.length > 0 && (
+            <ListSection
+              title={`Business Managers (${data.bms.length})`}
+              emptyMessage=""
+              items={data.bms.map((bm) => ({
+                id: bm.id,
+                primary: bm.name,
+                secondary: `BM ID: ${bm.id}`,
+              }))}
+            />
+          )}
 
           <ListSection
             title={`Instagram Business (${data.instagram_business_accounts.length})`}
