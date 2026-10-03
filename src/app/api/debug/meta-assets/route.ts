@@ -89,11 +89,24 @@ export async function GET() {
     }
     const me = (await meRes.json()) as { id?: string; name?: string };
     result.warnings.push(
-      `✅ Token válido para Facebook ID ${me.id}${me.name ? ` (${me.name})` : ""}.`,
+      `✅ Token válido. System User: ${me.name ?? "(sin nombre)"} (ID: ${me.id}).`,
     );
   } catch (e) {
     result.warnings.push(`/me excepción: ${(e as Error).message}`);
     return NextResponse.json(result);
+  }
+
+  // 1b. Detect actual scopes (works for System User tokens)
+  try {
+    const r = await fetch(`${GRAPH}/me/permissions?access_token=${encodeURIComponent(token)}`);
+    if (r.ok) {
+      const j = (await r.json()) as { data: Array<{ permission: string; status: string }> };
+      result.scopes = (j.data ?? [])
+        .filter((p) => p.status === "granted")
+        .map((p) => p.permission);
+    }
+  } catch {
+    // ignore
   }
 
   // 2. List pages (/me/accounts)
