@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+
+export const runtime = "nodejs";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { encrypt } from "@/lib/crypto";
 import { graphGet } from "@/lib/meta/oauth";

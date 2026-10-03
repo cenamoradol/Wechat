@@ -3,6 +3,8 @@ import { encrypt, decrypt } from "@/lib/crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
+export const runtime = "nodejs";
+
 export async function POST(req: Request) {
   const body = (await req.json().catch(() => ({}))) as { plaintext?: string };
   const plaintext = body.plaintext ?? "ping";

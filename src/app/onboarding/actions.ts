@@ -5,6 +5,8 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
+export const runtime = "nodejs";
+
 const Schema = z.object({
   workspace_name: z.string().min(1).max(100),
   timezone: z.string().default("America/Tegucigalpa"),

@@ -6,6 +6,8 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { limits, getClientIp } from "@/lib/rate-limit";
 
+export const runtime = "nodejs";
+
 const LoginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(1),

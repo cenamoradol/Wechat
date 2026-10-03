@@ -3,6 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { decrypt } from "@/lib/crypto";
 
+export const runtime = "nodejs";
+
 type DebugResult = {
   app: { id: string | null; name: string | null };
   token_used: "whatsapp_channel" | "none";

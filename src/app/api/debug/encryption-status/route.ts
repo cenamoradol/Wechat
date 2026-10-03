@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { createHash, randomBytes, createCipheriv } from "node:crypto";
 
+export const runtime = "nodejs";
+
 // Returns fingerprint + length of the current ENCRYPTION_KEY.
 // NEVER returns the actual key.
 export async function GET() {
