@@ -152,6 +152,39 @@ export async function GET() {
     result.warnings.push(`/me/businesses excepción: ${(e as Error).message}`);
   }
 
+  // 3b. Fallback: query the WABA stored in this channel directly, in case
+  // /me/businesses doesn't list it (System User has access via token but isn't
+  // listed as a member of the BM)
+  if (result.whatsapp_accounts.length === 0) {
+    const wabaId = (ch as any).meta?.waba_id as string | undefined;
+    if (wabaId) {
+      try {
+        const r = await fetch(
+          `${GRAPH}/${wabaId}?fields=id,name,phone_numbers{id,display_phone_number,verified_name,quality_rating,messaging_limit}&access_token=${token}`,
+        );
+        if (r.ok) {
+          const w = (await r.json()) as {
+            id: string;
+            name?: string;
+            phone_numbers?: { data: Array<{ id: string; display_phone_number?: string; verified_name?: string; quality_rating?: string }> };
+          };
+          result.whatsapp_accounts.push({
+            id: w.id,
+            name: w.name ?? "(sin nombre)",
+            phone_numbers: (w.phone_numbers?.data ?? []).map((p) => p.display_phone_number ?? p.id),
+          });
+          result.warnings.push(
+            `ℹ️ WABA ${w.id} consultado directamente (no listado en /me/businesses). Tu System User tiene acceso al token pero NO aparece como miembro del BM. Asignalo en business.facebook.com/settings/users.`,
+          );
+        } else {
+          result.warnings.push(`Direct WABA query failed: ${r.status} ${await r.text()}`);
+        }
+      } catch (e) {
+        result.warnings.push(`Direct WABA exception: ${(e as Error).message}`);
+      }
+    }
+  }
+
   // 4. List IG business accounts (via /me/accounts → instagram_business_account)
   for (const page of result.pages) {
     try {
