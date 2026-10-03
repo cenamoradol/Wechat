@@ -103,7 +103,7 @@ export type Database = {
           type: Database["public"]["Enums"]["channel_type"];
           external_id: string;
           display_name: string;
-          access_token_enc: string; // bytea as base64
+          access_token_enc: string; // text (base64-encoded AES-GCM ciphertext)
           webhook_secret_enc: string | null;
           meta: Record<string, unknown> | null;
           status: string;
