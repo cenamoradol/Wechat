@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { decrypt } from "@/lib/crypto";
 
@@ -8,23 +7,10 @@ export const runtime = "nodejs";
 // List all Businesses the current app is connected to, with all System Users
 // in each. This helps the user figure out where the mystery SU lives.
 export async function POST() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
   const admin = createAdminClient();
-  const { data: member } = await admin
-    .from("workspace_members")
-    .select("workspace_id")
-    .eq("user_id", user.id)
-    .limit(1)
-    .single();
-  if (!member) return NextResponse.json({ error: "No workspace" }, { status: 400 });
-
   const { data: ch } = await admin
     .from("channels")
     .select("access_token_enc, type")
-    .eq("workspace_id", member.workspace_id)
     .eq("type", "whatsapp")
     .limit(1)
     .maybeSingle();

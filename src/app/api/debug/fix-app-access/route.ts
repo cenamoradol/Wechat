@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { decrypt } from "@/lib/crypto";
-import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
@@ -8,23 +7,10 @@ export const runtime = "nodejs";
 // Adds the current channel's System User to the new app via Meta API
 // (uses app access token via client_credentials grant)
 export async function POST() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
   const admin = createAdminClient();
-  const { data: member } = await admin
-    .from("workspace_members")
-    .select("workspace_id")
-    .eq("user_id", user.id)
-    .limit(1)
-    .single();
-  if (!member) return NextResponse.json({ error: "No workspace" }, { status: 400 });
-
   const { data: ch } = await admin
     .from("channels")
     .select("access_token_enc, type, id")
-    .eq("workspace_id", member.workspace_id)
     .eq("type", "whatsapp")
     .limit(1)
     .maybeSingle();
