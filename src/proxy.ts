@@ -2,6 +2,8 @@ import { type NextRequest, NextResponse } from "next/server";
 import { updateSession } from "@/lib/supabase/middleware";
 
 const PUBLIC_PATHS = ["/login", "/signup", "/forgot-password", "/auth", "/api/debug/find-system-user", "/api/debug/list-bms"];
+// Webhook endpoints are public — Meta calls them with signed payloads, no session
+const WEBHOOK_PREFIXES = ["/api/webhooks/"];
 const AUTH_PREFIXES = ["/accept-invite"];
 
 export async function proxy(request: NextRequest) {
@@ -9,9 +11,10 @@ export async function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
 
   const isPublic = PUBLIC_PATHS.some((p) => pathname.startsWith(p));
+  const isWebhook = WEBHOOK_PREFIXES.some((p) => pathname.startsWith(p));
   const isAcceptInvite = AUTH_PREFIXES.some((p) => pathname.startsWith(p));
 
-  if (!user && !isPublic && !isAcceptInvite) {
+  if (!user && !isPublic && !isWebhook && !isAcceptInvite) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     url.searchParams.set("next", pathname + search);
@@ -30,6 +33,6 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|api/webhooks|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };
