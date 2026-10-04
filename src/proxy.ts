@@ -3,7 +3,7 @@ import { updateSession } from "@/lib/supabase/middleware";
 
 const PUBLIC_PATHS = ["/login", "/signup", "/forgot-password", "/auth", "/api/debug/find-system-user", "/api/debug/list-bms"];
 // Webhook endpoints are public — Meta calls them with signed payloads, no session
-const WEBHOOK_PREFIXES = ["/api/webhooks/", "/api/debug/simulate-webhook"];
+const WEBHOOK_PREFIXES = ["/api/webhooks/"];
 const AUTH_PREFIXES = ["/accept-invite"];
 
 export async function proxy(request: NextRequest) {
