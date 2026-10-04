@@ -34,9 +34,20 @@ export async function sendMessageAction(
   const { data: conv } = await admin
     .from("conversations")
     .select(
-      "id, workspace_id, contact_channels!inner(id, channel_id, external_user_id, channels!inner(id, type, external_id, access_token_enc))",
+      "id, workspace_id, contact_channel_id",
     )
     .eq("id", parsed.data.conversationId)
+    .maybeSingle();
+
+  if (!conv) return { error: "Conversación no encontrada" };
+
+  // Fetch the contact_channel with the channel
+  const { data: cc } = await admin
+    .from("contact_channels")
+    .select(
+      "id, channel_id, external_user_id, channels(id, type, external_id, access_token_enc)",
+    )
+    .eq("id", (conv as any).contact_channel_id)
     .maybeSingle();
 
   if (!conv) return { error: "Conversación no encontrada" };
