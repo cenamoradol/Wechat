@@ -192,7 +192,18 @@ export async function subscribeWebhooksAction(
     .join(" · ");
 
   revalidatePath("/settings/channels");
-  return allOk ? { success: summary } : { error: summary };
+
+  if (!allOk) {
+    // Add a helpful instruction about subscribing manually in WhatsApp Manager
+    const manualHint =
+      "\n\n💡 La API de suscripciones falla con esta app. Suscríbete manualmente en:\n" +
+      "1. business.facebook.com/wa/manage → tu WABA → Configuration → Webhooks\n" +
+      "2. Marca los campos: messages, message_deliveries, message_reads\n" +
+      "El webhook URL ya está verificado ✅ desde que arreglamos el proxy.";
+    return { error: summary + manualHint };
+  }
+
+  return { success: summary };
 }
 
 export async function reVerifyChannelAction(channelId: string): Promise<ChannelActionResult> {
