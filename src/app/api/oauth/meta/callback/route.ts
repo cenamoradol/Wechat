@@ -105,16 +105,48 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  // 5. Subscribe webhook for instagram object (covers FB + IG)
+  // 5. Best-effort subscribe to webhooks (may fail if app needs review)
+  // For Messenger + IG, the proper way is page-level subscriptions via /{page-id}/subscribed_apps
+  for (const page of pages) {
+    try {
+      await fetch(
+        `https://graph.facebook.com/v22.0/${page.id}/subscribed_apps`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${page.access_token}`,
+          },
+          body: JSON.stringify({
+            subscribed_fields: ["messages", "messaging_postbacks", "message_deliveries"],
+          }),
+        },
+      );
+    } catch (e) {
+      console.warn(`Page-level subscribe failed for ${page.id}:`, e);
+    }
+  }
+
+  // Also try app-level instagram subscription (best-effort, may need app review)
   try {
-    await graphPost(`/${appId}/subscriptions`, appSecret, {
-      object: "instagram",
-      callback_url: `${process.env.NEXT_PUBLIC_APP_URL}/api/webhooks/instagram`,
-      verify_token: process.env.META_WEBHOOK_VERIFY_TOKEN ?? "",
-      fields: ["messages", "messaging_postbacks"],
-    });
+    await fetch(
+      `https://graph.facebook.com/v22.0/${appId}/subscriptions`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${userToken}`,
+        },
+        body: JSON.stringify({
+          object: "instagram",
+          callback_url: `${process.env.NEXT_PUBLIC_APP_URL}/api/webhooks/instagram`,
+          verify_token: process.env.META_WEBHOOK_VERIFY_TOKEN ?? "",
+          fields: ["messages", "messaging_postbacks"],
+        }),
+      },
+    );
   } catch (e) {
-    console.warn("instagram subscription failed (may need app review):", e);
+    console.warn("App-level instagram subscription failed (may need app review):", e);
   }
 
   return NextResponse.redirect(
