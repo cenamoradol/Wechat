@@ -1,12 +1,9 @@
-"use server";
-
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { decrypt } from "@/lib/crypto";
 import { processInbound, logWebhookEvent } from "@/lib/channels/process";
 import { getAdapter } from "@/lib/channels";
-import { NextRequest } from "next/server";
 
 export const runtime = "nodejs";
 
