@@ -2,10 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifyMetaSignature } from "@/lib/meta/verify-signature";
 import { getAdapter } from "@/lib/channels";
 import { processInbound, logWebhookEvent } from "@/lib/channels/process";
+import { verifyWebhook } from "@/lib/meta/verify-webhook";
 
-export async function GET() {
-  // FB has no GET verification
-  return new NextResponse("Method Not Allowed", { status: 405 });
+export async function GET(req: NextRequest) {
+  return verifyWebhook(req.nextUrl.searchParams, process.env.META_WEBHOOK_VERIFY_TOKEN);
 }
 
 export async function POST(req: NextRequest) {

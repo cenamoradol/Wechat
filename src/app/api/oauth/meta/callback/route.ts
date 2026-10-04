@@ -1,155 +1,98 @@
 import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { encrypt } from "@/lib/crypto";
-import { graphGet, graphPost } from "@/lib/meta/oauth";
+import { encryptToBase64 } from "@/lib/crypto";
+import { META_GRAPH_VERSION, metaRedirectUri } from "@/lib/meta/login-config";
 
-type PageAsset = {
-  id: string;
-  name: string;
-  access_token: string;
-  instagram_business_account?: { id: string };
-};
+const Context = z.object({ state: z.string().uuid(), userId: z.string().uuid(), workspaceId: z.string().uuid() });
+const Page = z.object({
+  id: z.string().regex(/^\d+$/), name: z.string(), access_token: z.string().min(1),
+  instagram_business_account: z.object({ id: z.string().regex(/^\d+$/) }).optional(),
+});
+const GRAPH = `https://graph.facebook.com/${META_GRAPH_VERSION}`;
 
 export async function GET(req: NextRequest) {
+  const finish = (params: Record<string, string>) => {
+    const url = new URL("/settings/channels", req.url);
+    url.search = new URLSearchParams(params).toString();
+    const res = NextResponse.redirect(url);
+    res.cookies.set("meta_oauth_state", "", { path: "/api/oauth/meta", maxAge: 0 });
+    res.cookies.set("meta_oauth_state", "", { path: "/", maxAge: 0 });
+    return res;
+  };
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return NextResponse.redirect(new URL("/login", req.url));
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return finish({ error: "La sesión expiró. Inicia sesión y vuelve a conectar." });
 
+  let context;
+  try { context = Context.parse(JSON.parse(req.cookies.get("meta_oauth_state")?.value ?? "")); }
+  catch { return finish({ error: "Conexión caducada. Inicia nuevamente la conexión con Facebook." }); }
+  if (context.state !== req.nextUrl.searchParams.get("state") || context.userId !== user.id) {
+    return finish({ error: "La validación de la conexión falló. Vuelve a intentarlo." });
+  }
+  const { data: member, error: memberError } = await supabase.from("workspace_members")
+    .select("role").eq("workspace_id", context.workspaceId).eq("user_id", user.id).maybeSingle();
+  if (memberError || !member || !["owner", "admin"].includes(member.role)) return finish({ error: "Sin permiso para conectar canales." });
+  if (req.nextUrl.searchParams.has("error")) return finish({ error: "Autorización cancelada o rechazada por Meta." });
   const code = req.nextUrl.searchParams.get("code");
-  const error = req.nextUrl.searchParams.get("error");
-  if (error || !code) {
-    return NextResponse.redirect(
-      new URL(`/settings/channels?error=${encodeURIComponent(error ?? "no_code")}`, req.url),
-    );
-  }
+  if (!code) return finish({ error: "Meta no devolvió el código de autorización." });
 
-  const appId = process.env.NEXT_PUBLIC_META_APP_ID;
-  const appSecret = process.env.META_APP_SECRET;
-  const redirectUri = process.env.NEXT_PUBLIC_META_REDIRECT_URI;
-  if (!appId || !appSecret || !redirectUri) {
-    return NextResponse.json({ error: "env missing" }, { status: 500 });
-  }
-
-  // 1. Exchange code → user access_token
-  const tokenRes = await fetch(
-    `https://graph.facebook.com/v21.0/oauth/access_token?` +
-      new URLSearchParams({
-        client_id: appId,
-        client_secret: appSecret,
-        redirect_uri: redirectUri,
-        code,
-      }),
-  );
-  if (!tokenRes.ok) {
-    const text = await tokenRes.text();
-    return NextResponse.redirect(
-      new URL(`/settings/channels?error=${encodeURIComponent("token_exchange:" + text)}`, req.url),
-    );
-  }
-  const { access_token: userToken } = (await tokenRes.json()) as { access_token: string };
-
-  // 2. List user's pages
-  const pagesRes = await graphGet<{ data: PageAsset[] }>("/me/accounts?fields=id,name,access_token,instagram_business_account", userToken);
-  const pages = pagesRes.data ?? [];
-
-  // 3. Get workspace of this user
-  const admin = createAdminClient();
-  const { data: member } = await admin
-    .from("workspace_members")
-    .select("workspace_id")
-    .eq("user_id", user.id)
-    .limit(1)
-    .single();
-  if (!member) {
-    return NextResponse.redirect(new URL("/onboarding?error=no_workspace", req.url));
-  }
-  const workspaceId = member.workspace_id;
-
-  // 4. Store each page + linked IG account as channels
   let saved = 0;
-  for (const page of pages) {
-    const encToken = encrypt(page.access_token);
-    await admin.from("channels").upsert(
-      {
-        workspace_id: workspaceId,
-        type: "facebook",
-        external_id: page.id,
-        display_name: page.name,
-        access_token_enc: encToken.toString("base64"),
-        meta: { ig_business_account_id: page.instagram_business_account?.id ?? null },
-        status: "connected",
-        last_verified_at: new Date().toISOString(),
-      },
-      { onConflict: "workspace_id,type,external_id" },
-    );
-    saved++;
-
-    if (page.instagram_business_account?.id) {
-      await admin.from("channels").upsert(
-        {
-          workspace_id: workspaceId,
-          type: "instagram",
-          external_id: page.instagram_business_account.id,
-          display_name: `${page.name} (IG)`,
-          access_token_enc: encrypt(page.access_token).toString("base64"),
-          meta: { page_id: page.id },
-          status: "connected",
-          last_verified_at: new Date().toISOString(),
-        },
-        { onConflict: "workspace_id,type,external_id" },
-      );
-      saved++;
-    }
-  }
-
-  // 5. Best-effort subscribe to webhooks (may fail if app needs review)
-  // For Messenger + IG, the proper way is page-level subscriptions via /{page-id}/subscribed_apps
-  for (const page of pages) {
-    try {
-      await fetch(
-        `https://graph.facebook.com/v22.0/${page.id}/subscribed_apps`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${page.access_token}`,
-          },
-          body: JSON.stringify({
-            subscribed_fields: ["messages", "messaging_postbacks", "message_deliveries"],
-          }),
-        },
-      );
-    } catch (e) {
-      console.warn(`Page-level subscribe failed for ${page.id}:`, e);
-    }
-  }
-
-  // Also try app-level instagram subscription (best-effort, may need app review)
+  const warnings: string[] = [];
   try {
-    await fetch(
-      `https://graph.facebook.com/v22.0/${appId}/subscriptions`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${userToken}`,
-        },
-        body: JSON.stringify({
-          object: "instagram",
-          callback_url: `${process.env.NEXT_PUBLIC_APP_URL}/api/webhooks/instagram`,
-          verify_token: process.env.META_WEBHOOK_VERIFY_TOKEN ?? "",
-          fields: ["messages", "messaging_postbacks"],
-        }),
-      },
-    );
-  } catch (e) {
-    console.warn("App-level instagram subscription failed (may need app review):", e);
-  }
+    const appId = process.env.NEXT_PUBLIC_META_APP_ID;
+    const secret = process.env.META_APP_SECRET;
+    if (!appId || !secret) throw new Error("Faltan las credenciales de la app Meta en el servidor.");
+    const exchange = await fetch(`${GRAPH}/oauth/access_token`, {
+      method: "POST", cache: "no-store", body: new URLSearchParams({
+        client_id: appId, client_secret: secret, redirect_uri: metaRedirectUri(), code,
+      }),
+    });
+    if (!exchange.ok) throw new Error("Meta rechazó el código. Comprueba App ID, App Secret y la URL de retorno.");
+    const { access_token: token } = z.object({ access_token: z.string().min(1) }).parse(await exchange.json());
+    const pages: z.infer<typeof Page>[] = [];
+    let after: string | undefined;
+    do {
+      const url = new URL(`${GRAPH}/me/accounts`);
+      url.searchParams.set("fields", "id,name,access_token,instagram_business_account");
+      url.searchParams.set("limit", "100");
+      if (after) url.searchParams.set("after", after);
+      const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
+      if (!response.ok) throw new Error("No se pudieron consultar páginas e Instagram. Revisa pages_show_list, pages_read_engagement e instagram_basic en la autorización.");
+      const list = z.object({ data: z.array(Page), paging: z.object({
+        next: z.string().optional(), cursors: z.object({ after: z.string().optional() }).optional(),
+      }).optional() }).parse(await response.json());
+      pages.push(...list.data);
+      const next = list.paging?.next ? list.paging.cursors?.after : undefined;
+      if (next && next === after) throw new Error("Meta repitió la paginación. Intenta conectar nuevamente.");
+      after = next;
+    } while (after);
+    if (!pages.length) return finish({ error: "Meta no autorizó ninguna página. Selecciona PM Solution al conectar." });
 
-  return NextResponse.redirect(
-    new URL(`/settings/channels?connected=${saved}`, req.url),
-  );
+    const admin = createAdminClient();
+    for (const page of pages) {
+      const channels = [{ type: "facebook" as const, id: page.id, name: page.name },
+        ...(page.instagram_business_account ? [{ type: "instagram" as const, id: page.instagram_business_account.id, name: `${page.name} (Instagram)` }] : [])];
+      for (const channel of channels) {
+        const { error } = await admin.from("channels").upsert({
+          workspace_id: context.workspaceId, type: channel.type, external_id: channel.id,
+          display_name: channel.name, access_token_enc: encryptToBase64(page.access_token),
+          meta: { page_id: page.id }, status: "connected", last_verified_at: new Date().toISOString(),
+        }, { onConflict: "workspace_id,type,external_id" });
+        if (error) throw new Error("No se pudo guardar un canal autorizado. Los canales guardados previamente se conservan.");
+        saved++;
+      }
+      const subscription = await fetch(`${GRAPH}/${page.id}/subscribed_apps`, {
+        method: "POST", headers: { Authorization: `Bearer ${page.access_token}` },
+        body: new URLSearchParams({ subscribed_fields: "messages,messaging_postbacks,message_deliveries,message_reads" }),
+      });
+      const result = await subscription.json();
+      if (!subscription.ok || result.success !== true) warnings.push(`No se confirmó la suscripción de la página ${page.id}; revisa pages_manage_metadata y Webhooks en Meta.`);
+    }
+    if (!pages.some(p => p.instagram_business_account)) warnings.push("Meta no devolvió una cuenta Instagram vinculada; esto no confirma que no exista. Revisa permisos y la selección de activos.");
+    return finish({ connected: String(saved), ...(warnings.length ? { error: warnings.join(" ") } : {}) });
+  } catch (error) {
+    return finish({ error: error instanceof Error ? error.message : "No se pudo completar la conexión con Meta.", ...(saved ? { connected: String(saved) } : {}) });
+  }
 }
