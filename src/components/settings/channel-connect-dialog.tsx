@@ -16,7 +16,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Mail, ExternalLink, Smartphone, Info, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { connectWhatsAppManualAction } from "@/app/(workspace)/settings/channels/actions";
+import { connectWhatsAppManualAction, connectFacebookPageManualAction } from "@/app/(workspace)/settings/channels/actions";
 import { completeEmbeddedSignupV4Action } from "@/app/(workspace)/settings/channels/v4-actions";
 import { launchEmbeddedSignup } from "@/lib/meta/embedded-signup";
 
@@ -42,10 +42,11 @@ export function ChannelConnectDialog() {
         </DialogHeader>
 
         <Tabs defaultValue="v4">
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="v4">Embedded Signup v4</TabsTrigger>
-            <TabsTrigger value="whatsapp-manual">WhatsApp manual</TabsTrigger>
-            <TabsTrigger value="legacy">FB + IG (legacy)</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-4">
+            <TabsTrigger value="v4">Embedded v4</TabsTrigger>
+            <TabsTrigger value="whatsapp-manual">WA manual</TabsTrigger>
+            <TabsTrigger value="fb-manual">FB/IG manual</TabsTrigger>
+            <TabsTrigger value="legacy">OAuth</TabsTrigger>
           </TabsList>
 
           <TabsContent value="v4" className="pt-4">
@@ -54,6 +55,10 @@ export function ChannelConnectDialog() {
 
           <TabsContent value="whatsapp-manual" className="pt-4">
             <WhatsAppManualForm onSuccess={() => setOpen(false)} />
+          </TabsContent>
+
+          <TabsContent value="fb-manual" className="pt-4">
+            <FacebookPageManualForm onSuccess={() => setOpen(false)} />
           </TabsContent>
 
           <TabsContent value="legacy" className="space-y-4 pt-4">
@@ -257,6 +262,133 @@ function WhatsAppManualForm({ onSuccess }: { onSuccess: () => void }) {
 
       <Button type="submit" className="w-full" disabled={isPending}>
         {isPending ? "Conectando…" : "Conectar WhatsApp"}
+      </Button>
+    </form>
+  );
+}
+
+function FacebookPageManualForm({ onSuccess }: { onSuccess: () => void }) {
+  const [isPending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  const onSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setError(null);
+    const fd = new FormData(e.currentTarget);
+    const page_id = String(fd.get("page_id") ?? "").trim();
+    const access_token = String(fd.get("access_token") ?? "").trim();
+    const display_name = String(fd.get("display_name") ?? "").trim();
+
+    if (!page_id || !access_token) {
+      setError("Page ID y Access Token son requeridos");
+      return;
+    }
+    if (!/^\d+$/.test(page_id)) {
+      setError("Page ID debe ser solo números (ej. 1318350018035126)");
+      return;
+    }
+
+    startTransition(async () => {
+      try {
+        const res = await connectFacebookPageManualAction({
+          page_id,
+          access_token,
+          display_name: display_name || undefined,
+        });
+        if (res?.error) {
+          setError(res.error);
+          toast.error(res.error);
+          return;
+        }
+        const msg = res?.saved === 2
+          ? "Facebook + Instagram conectados"
+          : "Página de Facebook conectada";
+        toast.success(msg);
+        if (res.warnings?.length) {
+          for (const w of res.warnings) toast.warning(w);
+        }
+        onSuccess();
+      } catch (e) {
+        if (e instanceof Error && e.message.includes("NEXT_REDIRECT")) throw e;
+        const msg = e instanceof Error ? e.message : "Error inesperado";
+        setError(msg);
+        toast.error(msg);
+      }
+    });
+  };
+
+  return (
+    <form onSubmit={onSubmit} className="space-y-4">
+      <Alert>
+        <Info className="h-4 w-4" />
+        <AlertDescription className="space-y-2 text-xs">
+          <p>
+            Conecta una Página de Facebook (y su Instagram vinculado, si existe) sin OAuth de usuario.
+            Úsalo cuando tienes acceso por Business Manager pero no por facebook.com.
+          </p>
+          <p>
+            <strong>Cómo obtener el Page Access Token:</strong>
+          </p>
+          <ol className="list-decimal pl-4 space-y-1">
+            <li>
+              Ve a <strong>developers.facebook.com → tools/graph-api-explorer</strong>
+            </li>
+            <li>
+              Selecciona tu app (<code>842680622240701</code>) y arriba elige{" "}
+              <strong>"Get User Access Token"</strong>
+            </li>
+            <li>
+              Marca los permisos: <code>pages_show_list</code>,{" "}
+              <code>pages_read_engagement</code>, <code>pages_manage_metadata</code>
+            </li>
+            <li>
+              Click <strong>"Generate Access Token"</strong> y autoriza con tu cuenta
+            </li>
+            <li>
+              Ahora cambia a <strong>"Get Page Access Token"</strong> → selecciona tu página
+              "PM Solution" → click Submit
+            </li>
+            <li>
+              Copia el token largo <code>EAAxxxx...</code> que empieza por <code>EAA</code>
+            </li>
+          </ol>
+        </AlertDescription>
+      </Alert>
+
+      <div className="space-y-2">
+        <Label htmlFor="page_id">Page ID</Label>
+        <Input
+          id="page_id"
+          name="page_id"
+          placeholder="1318350018035126"
+          required
+        />
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="access_token">Page Access Token (EAA...)</Label>
+        <Input
+          id="access_token"
+          name="access_token"
+          type="password"
+          placeholder="EAAxxxxxxxxxxxxxxx..."
+          required
+        />
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="display_name">Nombre para mostrar (opcional)</Label>
+        <Input id="display_name" name="display_name" placeholder="PM Solution" />
+      </div>
+
+      {error && (
+        <p className="text-xs text-destructive" role="alert">
+          {error}
+        </p>
+      )}
+
+      <Button type="submit" className="w-full" disabled={isPending}>
+        {isPending ? "Conectando…" : "Conectar Facebook + Instagram"}
       </Button>
     </form>
   );

@@ -238,6 +238,109 @@ export async function reVerifyChannelAction(channelId: string): Promise<ChannelA
   }
 }
 
+const ManualFBPageSchema = z.object({
+  page_id: z.string().regex(/^\d+$/),
+  access_token: z.string().min(20),
+  display_name: z.string().max(100).optional(),
+});
+
+export async function connectFacebookPageManualAction(
+  input: z.infer<typeof ManualFBPageSchema>,
+): Promise<ChannelActionResult & { saved?: number; warnings?: string[] }> {
+  const parsed = ManualFBPageSchema.safeParse(input);
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
+
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Unauthorized" };
+
+  const admin = createAdminClient();
+  const { data: member } = await admin
+    .from("workspace_members")
+    .select("workspace_id, role")
+    .eq("user_id", user.id)
+    .limit(1)
+    .single();
+  if (!member) return { error: "No tienes workspace" };
+  if (!["owner", "admin"].includes(member.role)) return { error: "Sin permiso para conectar canales" };
+
+  // 1. Verify token + page via /{page-id}
+  const GRAPH = "https://graph.facebook.com/v22.0";
+  const probe = await fetch(
+    `${GRAPH}/${parsed.data.page_id}?fields=id,name,instagram_business_account{id,username}&access_token=${encodeURIComponent(parsed.data.access_token)}`,
+    { cache: "no-store" },
+  );
+  if (!probe.ok) {
+    const t = await probe.text();
+    return { error: `Meta rechazó el token (${probe.status}). ${t.slice(0, 150)}` };
+  }
+  const page = z.object({
+    id: z.string(),
+    name: z.string().optional(),
+    instagram_business_account: z.object({ id: z.string(), username: z.string().optional() }).optional(),
+  }).parse(await probe.json());
+
+  // 2. Save FB page
+  const encToken = encrypt(parsed.data.access_token);
+  const fbMeta: Record<string, unknown> = {};
+  const { error: fbSaveErr } = await admin
+    .from("channels")
+    .upsert({
+      workspace_id: member.workspace_id,
+      type: "facebook",
+      external_id: page.id,
+      display_name: parsed.data.display_name ?? page.name ?? `FB ${page.id.slice(-6)}`,
+      access_token_enc: encToken.toString("base64"),
+      meta: fbMeta,
+      status: "connected",
+      last_verified_at: new Date().toISOString(),
+    }, { onConflict: "workspace_id,type,external_id" });
+  if (fbSaveErr) return { error: `No se pudo guardar la página: ${fbSaveErr.message}` };
+
+  let saved = 1;
+  const warnings: string[] = [];
+
+  // 3. Save IG if linked
+  if (page.instagram_business_account) {
+    const igId = page.instagram_business_account.id;
+    const igMeta = { page_id: page.id, username: page.instagram_business_account.username ?? null };
+    const { error: igErr } = await admin.from("channels").upsert({
+      workspace_id: member.workspace_id,
+      type: "instagram",
+      external_id: igId,
+      display_name: `@${page.instagram_business_account.username ?? igId}`,
+      access_token_enc: encToken.toString("base64"),
+      meta: igMeta,
+      status: "connected",
+      last_verified_at: new Date().toISOString(),
+    }, { onConflict: "workspace_id,type,external_id" });
+    if (igErr) warnings.push(`Página guardada, pero Instagram no: ${igErr.message}`);
+    else saved++;
+  } else {
+    warnings.push("Esta página no tiene una cuenta de Instagram Business vinculada. Conéctala en Page Settings → Instagram.");
+  }
+
+  // 4. Subscribe page to webhooks (best-effort)
+  try {
+    const r = await fetch(`${GRAPH}/${page.id}/subscribed_apps`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        subscribed_fields: ["messages", "messaging_postbacks", "message_deliveries", "message_reads"],
+      }),
+    });
+    const body = await r.json().catch(() => ({}));
+    if (!r.ok || (body as any).success !== true) {
+      warnings.push("Página guardada, pero la suscripción a webhooks falló. Actívala manualmente en developers.facebook.com → tu app → Webhooks.");
+    }
+  } catch (e) {
+    warnings.push(`Suscripción a webhooks: ${(e as Error).message}`);
+  }
+
+  revalidatePath("/settings/channels");
+  return { success: "ok", saved, warnings: warnings.length ? warnings : undefined };
+}
+
 const ManualWASchema = z.object({
   phone_number_id: z.string().min(5),
   waba_id: z.string().min(5),
