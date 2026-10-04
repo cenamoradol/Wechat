@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Loader2, RefreshCw } from "lucide-react";
+import { Loader2, RefreshCw, Wrench } from "lucide-react";
+import { toast } from "sonner";
 
 type DebugData = {
   app: { id: string | null; name: string | null };
@@ -87,85 +88,64 @@ export function MetaAssetsDebug() {
   return (
     <div className="space-y-6">
       <EncryptionStatusPanel status={encStatus} onRefresh={fetchEnc} />
+      <FixAppAccessButton onSuccess={fetchData} />
+      <MetaAssetsBody
+        loading={loading}
+        error={error}
+        data={data}
+        onRefresh={fetchData}
+      />
+    </div>
+  );
+}
 
-      <div className="flex items-center justify-between">
-        <p className="text-xs text-muted-foreground">
-          Token usado: <code>{data?.token_used ?? "?"}</code>
-          {data?.app.id && <> · App: <code>{data.app.id}</code></>}
-        </p>
-        <Button size="sm" variant="outline" onClick={fetchData} disabled={loading}>
-          <RefreshCw className={`mr-2 h-3 w-3 ${loading ? "animate-spin" : ""}`} />
-          Refrescar
-        </Button>
-      </div>
+function FixAppAccessButton({ onSuccess }: { onSuccess: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<string | null>(null);
 
-      {loading && !data && (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          Consultando Meta Graph API...
+  const onFix = async () => {
+    setBusy(true);
+    setResult(null);
+    try {
+      // Read channelId from the URL or known data
+      // The endpoint reads from the connected channel in the user's workspace
+      const r = await fetch("/api/debug/fix-app-access", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}));
+        setResult(`Error: ${j.error ?? r.statusText}`);
+        toast.error("Error al arreglar acceso");
+        return;
+      }
+      const j = await r.json();
+      setResult(j.log?.join(" → ") ?? "OK");
+      toast.success("Acceso arreglado. Refresca el panel.");
+      setTimeout(() => onSuccess(), 1000);
+    } catch (e) {
+      setResult(`Error: ${(e as Error).message}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="rounded-md border bg-blue-50 p-3 text-xs space-y-2">
+      <div className="font-semibold uppercase tracking-wide">Arreglar acceso a la app</div>
+      <p className="text-muted-foreground">
+        Si tu token es de un System User que no aparece en tu UI pero funciona para el WABA,
+        este botón lo asigna a la app actual y re-suscribe los webhooks automáticamente.
+      </p>
+      <Button onClick={onFix} disabled={busy} size="sm">
+        {busy ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : <Wrench className="mr-2 h-3 w-3" />}
+        Arreglar acceso + suscribir webhooks
+      </Button>
+      {result && (
+        <div className="rounded bg-muted/50 p-2 text-[11px] font-mono whitespace-pre-wrap">
+          {result}
         </div>
-      )}
-
-      {error && <p className="text-sm text-red-600">{error}</p>}
-
-      {data && (
-        <>
-          {data.warnings.length > 0 && (
-            <div className="space-y-1 rounded-md border bg-muted/30 p-3 text-xs">
-              {data.warnings.map((w, i) => (
-                <div key={i}>{w}</div>
-              ))}
-            </div>
-          )}
-
-          <ScopesSection scopes={data.scopes} />
-
-          <ListSection
-            title={`Páginas de Facebook (${data.pages.length})`}
-            emptyMessage="Ninguna. Tu System User no admin ninguna página."
-            items={data.pages.map((p) => ({
-              id: p.id,
-              primary: p.name,
-              secondary: `ID: ${p.id}`,
-              tags: p.tasks.slice(0, 5),
-            }))}
-          />
-
-          <ListSection
-            title={`WhatsApp Business Accounts (${data.whatsapp_accounts.length})`}
-            emptyMessage="Ninguno visible desde este token. Tu System User no tiene asignado el WABA real."
-            items={data.whatsapp_accounts.map((w) => ({
-              id: w.id,
-              primary: w.name,
-              secondary: `WABA ID: ${w.id}`,
-              tags: w.phone_numbers,
-            }))}
-          />
-
-          {data.bms.length > 0 && (
-            <ListSection
-              title={`Business Managers (${data.bms.length})`}
-              emptyMessage=""
-              items={data.bms.map((bm) => ({
-                id: bm.id,
-                primary: bm.name,
-                secondary: `BM ID: ${bm.id}`,
-              }))}
-            />
-          )}
-
-          <ListSection
-            title={`Instagram Business (${data.instagram_business_accounts.length})`}
-            emptyMessage="Ninguno. Vincula una cuenta IG Business/Creator a una de tus páginas."
-            items={data.instagram_business_accounts.map((ig) => ({
-              id: ig.id,
-              primary: `@${ig.username ?? "(sin username)"}`,
-              secondary: `IG ID: ${ig.id} · Page ID: ${ig.page_id}`,
-            }))}
-          />
-
-          <Checklist />
-        </>
       )}
     </div>
   );
@@ -218,6 +198,116 @@ function EncryptionStatusPanel({
         )}
       </div>
       <div className="mt-2 font-medium">{status.recommendation}</div>
+    </div>
+  );
+}
+
+function MetaAssetsBody({
+  loading,
+  error,
+  data,
+  onRefresh,
+}: {
+  loading: boolean;
+  error: string | null;
+  data: DebugData | null;
+  onRefresh: () => void;
+}) {
+  if (loading && !data) {
+    return (
+      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <Loader2 className="h-4 w-4 animate-spin" />
+        Consultando Meta Graph API...
+      </div>
+    );
+  }
+
+  if (error) {
+    return <p className="text-sm text-red-600">{error}</p>;
+  }
+
+  if (!data) return null;
+
+  return <MetaAssetsInner data={data} loading={loading} onRefresh={onRefresh} />;
+}
+
+function MetaAssetsInner({
+  data,
+  loading,
+  onRefresh,
+}: {
+  data: DebugData;
+  loading: boolean;
+  onRefresh: () => void;
+}) {
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <p className="text-xs text-muted-foreground">
+          Token usado: <code>{data.token_used}</code>
+          {data.app.id && <> · App: <code>{data.app.id}</code></>}
+        </p>
+        <Button size="sm" variant="outline" onClick={onRefresh} disabled={loading}>
+          <RefreshCw className={`mr-2 h-3 w-3 ${loading ? "animate-spin" : ""}`} />
+          Refrescar
+        </Button>
+      </div>
+
+      {data.warnings.length > 0 && (
+        <div className="space-y-1 rounded-md border bg-muted/30 p-3 text-xs">
+          {data.warnings.map((w, i) => (
+            <div key={i}>{w}</div>
+          ))}
+        </div>
+      )}
+
+      <ScopesSection scopes={data.scopes} />
+
+      <ListSection
+        title={`Páginas de Facebook (${data.pages.length})`}
+        emptyMessage="Ninguna. Tu System User no admin ninguna página."
+        items={data.pages.map((p) => ({
+          id: p.id,
+          primary: p.name,
+          secondary: `ID: ${p.id}`,
+          tags: p.tasks.slice(0, 5),
+        }))}
+      />
+
+      <ListSection
+        title={`WhatsApp Business Accounts (${data.whatsapp_accounts.length})`}
+        emptyMessage="Ninguno visible desde este token. Tu System User no tiene asignado el WABA real."
+        items={data.whatsapp_accounts.map((w) => ({
+          id: w.id,
+          primary: w.name,
+          secondary: `WABA ID: ${w.id}`,
+          tags: w.phone_numbers,
+        }))}
+      />
+
+      {data.bms.length > 0 && (
+        <ListSection
+          title={`Business Managers (${data.bms.length})`}
+          emptyMessage=""
+          items={data.bms.map((bm) => ({
+            id: bm.id,
+            primary: bm.name,
+            secondary: `BM ID: ${bm.id}`,
+          }))}
+        />
+      )}
+
+      <ListSection
+        title={`Instagram Business (${data.instagram_business_accounts.length})`}
+        emptyMessage="Ninguno. Vincula una cuenta IG Business/Creator a una de tus páginas."
+        items={data.instagram_business_accounts.map((ig) => ({
+          id: ig.id,
+          primary: `@${ig.username ?? "(sin username)"}`,
+          secondary: `IG ID: ${ig.id} · Page ID: ${ig.page_id}`,
+        }))}
+      />
+
+      <Checklist />
     </div>
   );
 }
