@@ -60,6 +60,23 @@ export function ChannelConnectDialog() {
             <p className="text-sm text-muted-foreground">
               OAuth básico (sin Embedded Signup). Solo para FB + IG. No usa config_id.
             </p>
+            <Alert>
+              <Info className="h-4 w-4" />
+              <AlertDescription className="space-y-2 text-xs">
+                <p>
+                  <strong>Antes de conectar, agrega este Redirect URI exacto en tu app de Meta:</strong>
+                </p>
+                <code className="block break-all rounded bg-muted px-2 py-1 text-[11px]">
+                  https://wechat-eight-sigma.vercel.app/api/oauth/meta/callback
+                </code>
+                <p>
+                  En <strong>developers.facebook.com → tu app → Facebook Login → Settings</strong> (o en
+                  "Client OAuth Settings" en App Settings → Basic) marca{" "}
+                  <strong>Client OAuth Login</strong> y <strong>Web OAuth Login</strong>, y agrega la URL
+                  exacta de arriba.
+                </p>
+              </AlertDescription>
+            </Alert>
             <Button asChild className="w-full">
               <a href="/api/oauth/meta/start">
                 <ExternalLink className="mr-2 h-4 w-4" />
