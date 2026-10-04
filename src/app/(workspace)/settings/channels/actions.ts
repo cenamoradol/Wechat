@@ -71,6 +71,130 @@ export async function deleteChannelAction(channelId: string): Promise<ChannelAct
   return { success: "ok" };
 }
 
+export async function subscribeWebhooksAction(
+  channelId: string,
+): Promise<ChannelActionResult> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Unauthorized" };
+
+  const admin = createAdminClient();
+  const { data: ch } = await admin
+    .from("channels")
+    .select("type, access_token_enc, external_id")
+    .eq("id", channelId)
+    .single();
+  if (!ch) return { error: "Canal no encontrado" };
+
+  let token: string;
+  try {
+    token = decrypt(Buffer.from(ch.access_token_enc, "base64"));
+  } catch (e) {
+    return { error: `No se pudo descifrar el token: ${(e as Error).message}` };
+  }
+
+  const appId = process.env.NEXT_PUBLIC_META_APP_ID;
+  if (!appId) return { error: "META_APP_ID no configurado" };
+
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+  const verifyToken = process.env.META_WEBHOOK_VERIFY_TOKEN ?? "";
+
+  const results: { object: string; ok: boolean; status: number; msg?: string }[] = [];
+
+  // 1. Subscribe to whatsapp_business_account (for WhatsApp messages)
+  if (ch.type === "whatsapp") {
+    try {
+      const r = await fetch(`https://graph.facebook.com/v22.0/${appId}/subscriptions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          object: "whatsapp_business_account",
+          callback_url: `${appUrl}/api/webhooks/whatsapp`,
+          verify_token: verifyToken,
+          fields: ["messages", "message_deliveries", "message_reads", "message_echoes"],
+        }),
+      });
+      const body = await r.json().catch(() => ({}));
+      results.push({
+        object: "whatsapp_business_account",
+        ok: r.ok,
+        status: r.status,
+        msg: typeof body === "object" && "error" in body ? (body as any).error?.message : undefined,
+      });
+    } catch (e) {
+      results.push({
+        object: "whatsapp_business_account",
+        ok: false,
+        status: 0,
+        msg: (e as Error).message,
+      });
+    }
+  }
+
+  // 2. Subscribe to instagram (covers Facebook Messenger + Instagram)
+  try {
+    const r = await fetch(`https://graph.facebook.com/v22.0/${appId}/subscriptions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        object: "instagram",
+        callback_url: `${appUrl}/api/webhooks/instagram`,
+        verify_token: verifyToken,
+        fields: ["messages", "messaging_postbacks", "messaging_referrals", "message_deliveries", "message_reads"],
+      }),
+    });
+    const body = await r.json().catch(() => ({}));
+    results.push({
+      object: "instagram",
+      ok: r.ok,
+      status: r.status,
+      msg: typeof body === "object" && "error" in body ? (body as any).error?.message : undefined,
+    });
+  } catch (e) {
+    results.push({
+      object: "instagram",
+      ok: false,
+      status: 0,
+      msg: (e as Error).message,
+    });
+  }
+
+  // 3. Subscribe the page itself (needed for Messenger on some pages)
+  if (ch.type === "facebook") {
+    try {
+      const r = await fetch(`https://graph.facebook.com/v22.0/${ch.external_id}/subscribed_apps`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          subscribed_fields: ["messages", "messaging_postbacks", "message_deliveries", "message_reads"],
+        }),
+      });
+      const body = await r.json().catch(() => ({}));
+      results.push({
+        object: `page:${ch.external_id}`,
+        ok: r.ok,
+        status: r.status,
+        msg: typeof body === "object" && "error" in body ? (body as any).error?.message : undefined,
+      });
+    } catch (e) {
+      results.push({
+        object: `page:${ch.external_id}`,
+        ok: false,
+        status: 0,
+        msg: (e as Error).message,
+      });
+    }
+  }
+
+  const allOk = results.every((r) => r.ok);
+  const summary = results
+    .map((r) => `${r.ok ? "✅" : "❌"} ${r.object}: ${r.status}${r.msg ? ` — ${r.msg.slice(0, 120)}` : ""}`)
+    .join(" · ");
+
+  revalidatePath("/settings/channels");
+  return allOk ? { success: summary } : { error: summary };
+}
+
 export async function reVerifyChannelAction(channelId: string): Promise<ChannelActionResult> {
   const admin = createAdminClient();
   const { data: ch } = await admin

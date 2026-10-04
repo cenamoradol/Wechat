@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Trash2, RefreshCw, KeyRound, Loader2 } from "lucide-react";
+import { Trash2, RefreshCw, KeyRound, Webhook, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -18,6 +18,7 @@ import { toast } from "sonner";
 import {
   deleteChannelAction,
   reVerifyChannelAction,
+  subscribeWebhooksAction,
   updateChannelTokenAction,
 } from "@/app/(workspace)/settings/channels/actions";
 
@@ -47,8 +48,28 @@ export function ChannelRowActions({
     });
   };
 
+  const onSubscribe = () => {
+    startTransition(async () => {
+      const res = await subscribeWebhooksAction(channelId);
+      if (res?.error) {
+        toast.error(res.error, { duration: 8000 });
+      } else {
+        toast.success(res.success ?? "Webhooks suscritos", { duration: 6000 });
+      }
+    });
+  };
+
   return (
     <div className="flex gap-1">
+      <Button
+        variant="ghost"
+        size="icon"
+        onClick={onSubscribe}
+        disabled={isPending}
+        title="Re-suscribir webhooks"
+      >
+        <Webhook className="h-4 w-4" />
+      </Button>
       <UpdateTokenDialog channelId={channelId} />
       <Button variant="ghost" size="icon" onClick={onReVerify} disabled={isPending} title="Re-verificar">
         <RefreshCw className="h-4 w-4" />
