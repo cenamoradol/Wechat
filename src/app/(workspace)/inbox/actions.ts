@@ -63,42 +63,46 @@ export async function sendMessageAction(
 
   if (!cc) return { error: "Canal no encontrado" };
   const ch = (cc as any).channels;
+  const channelExternalId: string = (cc as any).external_user_id;
+  const channelType: string = ch?.type;
+  const channelAccessTokenEnc: string = ch?.access_token_enc;
+  const channelFromId: string = ch?.external_id;
 
   // 3. Decrypt channel token
   let token: string;
   try {
-    token = decrypt(Buffer.from(ch.access_token_enc, "base64"));
+    token = decrypt(Buffer.from(channelAccessTokenEnc, "base64"));
   } catch (e) {
     return { error: `No se pudo descifrar el token: ${(e as Error).message}` };
   }
 
   // 4. Send via the appropriate channel adapter
-  const adapter = getAdapter(ch.type as "whatsapp" | "facebook" | "instagram");
+  const adapter = getAdapter(channelType as "whatsapp" | "facebook" | "instagram");
   let result: { externalId: string };
   try {
-    if (ch.type === "whatsapp") {
+    if (channelType === "whatsapp") {
       result = await adapter.sendText({
         accessToken: token,
-        fromExternalId: ch.external_id,
-        toExternalId: cc.external_user_id,
+        fromExternalId: channelFromId,
+        toExternalId: channelExternalId,
         text: parsed.data.text,
       });
-    } else if (ch.type === "facebook") {
+    } else if (channelType === "facebook") {
       result = await adapter.sendText({
         accessToken: token,
-        fromExternalId: ch.external_id,
-        toExternalId: cc.external_user_id,
+        fromExternalId: channelFromId,
+        toExternalId: channelExternalId,
         text: parsed.data.text,
       });
-    } else if (ch.type === "instagram") {
+    } else if (channelType === "instagram") {
       result = await adapter.sendText({
         accessToken: token,
-        fromExternalId: ch.external_id,
-        toExternalId: cc.external_user_id,
+        fromExternalId: channelFromId,
+        toExternalId: channelExternalId,
         text: parsed.data.text,
       });
     } else {
-      return { error: `Canal ${ch.type} no soportado para envío` };
+      return { error: `Canal ${channelType} no soportado para envío` };
     }
   } catch (e) {
     console.error("sendMessage error", e);
