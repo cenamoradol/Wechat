@@ -1,6 +1,8 @@
 # Setup de Meta (Facebook) para Wechat
 
-Guía completa para configurar la app de Meta para usar con Wechat. **Si te equivocas, vuelve a esta guía**.
+Guía completa para configurar la app de Meta para usar con Wechat.
+
+> ⚠️ **ACTUALIZADO 2026**: El nuevo flujo de creación de apps de Meta usa **"Casos de uso"** (use cases) en vez del antiguo selector de "tipo de app" (Business/Consumer). Esta guía refleja el flujo actual.
 
 ## 📋 Lo que ya tienes (conservar)
 
@@ -20,163 +22,186 @@ Guía completa para configurar la app de Meta para usar con Wechat. **Si te equi
 
 ---
 
-## 🛠 Paso a paso para recrear la app
+## 🛠 Paso a paso para recrear la app (flujo 2026)
 
-### 1. Crear la app
+### Paso 1: Detalles de la app
 
 1. Ve a [developers.facebook.com](https://developers.facebook.com)
 2. Click **"Mis Apps"** → **"Crear app"**
-3. Tipo: **"Business"** ← IMPORTANTE: Business, no Consumer ni Other
-4. Nombre de la app: **"Wechat"** (o el que prefieras)
-5. Email de contacto: tu email
-6. Click **"Crear app"** → completa captcha
+3. **Nombre de la app**: `Wechat` (o el que prefieras)
+4. **Email de contacto**: tu email
+5. Click **"Siguiente"** (o "Next")
 
-### 2. Guarda el nuevo `App ID` y `App Secret`
+### Paso 2: Casos de uso (USE CASES)
 
-En la página principal de tu nueva app, arriba verás:
+**Esta es la pantalla clave del nuevo flujo.** Verás una lista de casos de uso predefinidos. **Marca SOLO estos 2:**
 
-- **App ID**: un número largo, ej. `987654321098765` — **GUÁRDALO**
-- **App Secret**: click "Mostrar" → requiere tu password de Facebook → copia el valor — **GUÁRDALO**
+- ✅ **"Conectarte con los clientes a través de WhatsApp"** ← CRÍTICO
+  - Esto añade WhatsApp + Messenger + Instagram automáticamente
+  - Permisos por defecto: `public_profile`, `whatsapp_business_management`, `whatsapp_business_messaging`
 
-### 3. Añadir los 3 productos
+- ✅ **"Autenticar y solicitar datos a usuarios con el inicio de sesión con Facebook"** (opcional pero recomendado)
+  - Esto añade Facebook Login, necesario para el OAuth que usamos en el tab "FB + IG (legacy)" de Wechat
+  - Añade `email`, `public_profile`
 
-En la página de tu app → sidebar izquierdo → **"Add Product"** (o "Agregar producto"):
+**NO necesitas** los otros casos (anuncios, threads, juegos) — son para otros tipos de apps.
 
-- ✅ **WhatsApp** (Messenger setup incluye este producto)
-- ✅ **Messenger**
-- ✅ **Instagram**
+> ⚠️ Si la lista de casos de uso no muestra WhatsApp, asegúrate de que tu Business Manager "Buho Digital" existe y tienes al menos una página de Facebook. Sin eso, Meta no te muestra el caso de uso de WhatsApp.
 
-### 4. Configurar WhatsApp (vía Embedded Signup)
+Click **"Siguiente"**.
 
-1. Sidebar → **WhatsApp → API Setup**
-2. Verás tu número de prueba `+1 555-xxxx` (no importa, lo borraremos)
-3. **NO uses el token temporal de aquí** — usa el del System User (paso 6)
-4. Guarda el **Phone Number ID** y **WABA ID** que ya tienes:
-   - Phone Number ID: `1276692908855446`
-   - WABA ID: `2017363685552310`
+### Paso 3: Negocio (Business Manager)
 
-### 5. Crear la Embedded Signup Configuration (para OAuth)
+1. Selecciona **"Buho Digital"** como Business Manager
+2. Click **"Siguiente"**
 
-1. Sidebar → **Facebook Login for Business → Configurations** (o busca "Embedded Signup")
-2. Click **"Create from template"** o **"Create configuration"**
-3. Nombre: "Wechat OAuth"
-4. Selecciona productos: **WhatsApp + Messenger + Instagram**
-5. Permisos a pedir:
-   ```
-   business_management
-   pages_show_list
-   pages_messaging
-   instagram_basic
-   instagram_manage_messages
-   whatsapp_business_management
-   whatsapp_business_messaging
-   ```
-6. **Valid OAuth Redirect URIs** → agregar:
-   ```
-   http://localhost:3000/api/oauth/meta/callback
-   https://wechat-eight-sigma.vercel.app/api/oauth/meta/callback
-   ```
-   (el segundo es para producción)
-7. Click **"Generate"** → copia el **`config_id`** generado
+> ⚠️ Si "Buho Digital" no aparece, necesitas crearlo primero en [business.facebook.com/create](https://business.facebook.com/create)
 
-### 6. Vincular la app al Business Manager "Buho Digital"
+### Paso 4: Requisitos
 
-1. Ve a [business.facebook.com/settings/accounts](https://business.facebook.com/settings/accounts)
-2. Click **"Apps"** → **"Add"**
-3. Busca tu nueva app por nombre o ID
-4. Click **"Add"**
-5. Verifica que la app aparece listada en "Apps"
+Meta te mostrará una checklist de cosas a hacer. **Las más importantes:**
 
-### 7. Asignar el System User correcto a la nueva app
+- [ ] Verificar tu Business Manager (si no lo está)
+- [ ] Agregar un método de pago (para WhatsApp en producción, en dev no es necesario)
+- [ ] Verificar tu dominio (opcional para dev)
 
-1. Ve a [business.facebook.com/settings/users](https://business.facebook.com/settings/users)
-2. Click en **System User "admin"** con ID `61592458953927` (NO el otro)
-3. En la sección **"Apps"** → click **"Add Apps"**
-4. Selecciona tu nueva app "Wechat"
-5. **Full Control** → Save
-6. Verifica que la app aparece en "Apps" con check verde
+Click "Siguiente" cuando esté listo (o sáltalo para terminar rápido).
 
-### 8. Generar el System User Token (CRÍTICO — desde el User correcto)
+### Paso 5: Resumen
 
-1. Sigue en la página del System User `61592458953927`
-2. Click **"Generate New Token"**
-3. **App**: selecciona tu nueva app "Wechat"
-4. **Marca estos 7 scopes**:
-   - ✅ business_management
-   - ✅ pages_show_list
-   - ✅ pages_messaging
-   - ✅ instagram_basic
-   - ✅ instagram_manage_messages
-   - ✅ whatsapp_business_management
-   - ✅ whatsapp_business_messaging
-5. **Expiración**: "Never" (o la más larga)
-6. Click **"Generate Token"** → copia el `EAAxxxxxxx...` LARGO
+Meta te muestra un resumen. Click **"Crear app"**.
 
-⚠️ **CRÍTICO**: Verifica que el ID del System User (mostrado en la página) es `61592458953927`. Si dice otro, estás en el System User equivocado.
-
-### 9. Configurar el webhook URL (DESPUÉS de deployar a Vercel)
-
-Una vez que Vercel tenga la nueva app desplegada, los webhooks se configuran desde Wechat (botón "Re-suscribir webhooks"). Si lo quieres hacer manual:
-
-1. [developers.facebook.com](https://developers.facebook.com) → tu app
-2. Sidebar → **Webhooks** → **"Add Subscription"** o configurar producto
-3. Para cada producto (WhatsApp, Messenger/Instagram):
-
-   **WhatsApp Business Account:**
-   - Callback URL: `https://wechat-eight-sigma.vercel.app/api/webhooks/whatsapp`
-   - Verify Token: el que pongas en `META_WEBHOOK_VERIFY_TOKEN`
-   - Webhook fields: `messages`, `message_deliveries`, `message_reads`
-
-   **Instagram (cubre Messenger + IG):**
-   - Callback URL: `https://wechat-eight-sigma.vercel.app/api/webhooks/instagram`
-   - Verify Token: el mismo de arriba
-   - Webhook fields: `messages`, `messaging_postbacks`
+**¡Listo!** Tu app está creada.
 
 ---
 
-## 🔐 Actualizar .env.local y Vercel
+## 📝 Guarda estos valores
 
-Una vez que tengas el nuevo `App ID`, `App Secret` y `config_id`, actualiza las env vars:
+Cuando entres al dashboard de la app, **apunta**:
 
-### .env.local (reemplaza los valores):
+- **App ID** (número en la parte superior, ej. `987654321098765`) ← **MUY IMPORTANTE**
+- **App Secret** (Settings → Basic → "Show" → copia) ← **MUY IMPORTANTE**
+
+---
+
+## ⚙️ Configurar productos y webhooks (DESPUÉS de crear la app)
+
+### 1. Verificar que WhatsApp + Messenger + Instagram están añadidos
+
+1. En el dashboard de tu app → **"Add Product"** (si no se añadieron por el caso de uso)
+2. Añade cualquier producto faltante:
+   - **WhatsApp**
+   - **Messenger**
+   - **Instagram**
+
+### 2. Configurar WhatsApp (vía Meta, no en Wechat)
+
+1. Sidebar → **WhatsApp → API Setup**
+2. Verás tu **Phone Number ID** y **WABA ID** — estos ya los tienes:
+   - Phone Number ID: `1276692908855446`
+   - WABA ID: `2017363685552310`
+3. **NO uses el token temporal** que aparece aquí — usa el del System User (siguiente paso)
+
+### 3. Crear Embedded Signup Config (para OAuth)
+
+1. Sidebar → busca **"Embedded Signup"** o "Facebook Login for Business → Configurations"
+2. Click **"Create from template"** o "Create configuration"
+3. Nombre: "Wechat OAuth"
+4. Productos: **WhatsApp + Messenger + Instagram**
+5. Permisos (marca los 7):
+   ```
+   ✅ business_management
+   ✅ pages_show_list
+   ✅ pages_messaging
+   ✅ instagram_basic
+   ✅ instagram_manage_messages
+   ✅ whatsapp_business_management
+   ✅ whatsapp_business_messaging
+   ```
+6. **Valid OAuth Redirect URIs**:
+   - `http://localhost:3000/api/oauth/meta/callback`
+   - `https://wechat-eight-sigma.vercel.app/api/oauth/meta/callback`
+7. **Copia el `config_id`** generado ← **MUY IMPORTANTE**
+
+### 4. Vincular app al Business Manager "Buho Digital"
+
+1. Ve a [business.facebook.com/settings/accounts](https://business.facebook.com/settings/accounts)
+2. Click **"Apps"** → **"Add"**
+3. Busca tu nueva app por nombre
+4. Click **"Add"**
+
+### 5. Asignar System User correcto a la app
+
+1. [business.facebook.com/settings/users](https://business.facebook.com/settings/users)
+2. Click en **System User "admin" con ID `61592458953927`** (verifica el ID antes de continuar)
+3. Sección **"Apps"** → **"Add Apps"** → selecciona tu nueva app
+4. **Full Control** → Save
+5. Verifica que la app aparece listada
+
+### 6. Generar System User Token
+
+1. Sigue en el System User `61592458953927`
+2. **"Generate New Token"**
+3. **App**: tu nueva app "Wechat"
+4. Marca los **7 scopes** (mismos que en paso 3)
+5. Expiración: "Never" (o lo más largo)
+6. **Generate Token** → copia el `EAAxxxxx...` LARGO
+
+⚠️ **CRÍTICO**: Verifica que generas el token desde el System User `61592458953927`, NO desde otro. Si el ID es diferente, estás en el equivocado.
+
+### 7. Configurar webhook (DESPUÉS de deploy a Vercel)
+
+Una vez Vercel esté actualizado, los webhooks se suscriben desde Wechat. Si lo quieres hacer manual:
+
+1. [developers.facebook.com](https://developers.facebook.com) → tu app
+2. Sidebar → **Webhooks** (depende de la app, puede estar en "Products → WhatsApp → Configuration")
+
+**Para WhatsApp:**
+- Callback URL: `https://wechat-eight-sigma.vercel.app/api/webhooks/whatsapp`
+- Verify Token: tu `META_WEBHOOK_VERIFY_TOKEN`
+- Fields: `messages`, `message_deliveries`, `message_reads`
+
+**Para Instagram (cubre FB + IG):**
+- Callback URL: `https://wechat-eight-sigma.vercel.app/api/webhooks/instagram`
+- Verify Token: el mismo
+- Fields: `messages`, `messaging_postbacks`
+
+---
+
+## 🔐 Actualizar env vars (DESPUÉS de tener todo)
+
+### `.env.local` (reemplaza los valores):
 
 ```bash
-# === Meta (cambia el App ID y App Secret) ===
+# === Meta (CAMBIA ESTOS 4) ===
 META_APP_ID=<nuevo-app-id>
 META_APP_SECRET=<nuevo-app-secret>
 NEXT_PUBLIC_META_APP_ID=<nuevo-app-id>
 NEXT_PUBLIC_META_CONFIG_ID=<nuevo-config-id>
 ```
 
-### Vercel Dashboard:
+### Vercel:
 
-Ve a tu proyecto en [vercel.com](https://vercel.com) → **Settings** → **Environment Variables** y actualiza las mismas 4 variables. **Después haz un Redeploy** o push un commit vacío.
+Ve a tu proyecto en [vercel.com](https://vercel.com) → **Settings** → **Environment Variables** y actualiza las mismas 4 variables. **Después haz Redeploy**.
 
 ---
 
 ## ✅ Cómo verificar que todo está bien
 
 1. Pega tu nuevo token en Wechat → /settings/channels → 🔑 Actualizar token
-2. Refresca el panel de diagnóstico. Deberías ver:
-   - ✅ Token válido. System User: admin (ID: 61592458953927) ← **ESTE ID, no el otro**
-   - ✅ pages_show_list
-   - ✅ business_management
-   - ✅ pages_messaging
-   - ✅ instagram_basic
-   - ✅ whatsapp_business_management
-   - ✅ instagram_manage_messages
-   - ✅ whatsapp_business_messaging
-   - ✅ Páginas de Facebook: "PM Solution"
-   - ✅ WhatsApp Business Accounts: "PMSolution" +504 3333-0274
-3. Click 🔗 Re-suscribir webhooks → debería salir ✅
+2. Refresca el panel de diagnóstico. **Verifica que diga `System User: admin (ID: 61592458953927)`**, no otro ID
+3. Scopes esperados: ✅ los 7 + quizás public_profile
+4. Páginas: ✅ "PM Solution"
+5. Click 🔗 Re-suscribir webhooks → debería salir ✅
 
 ---
 
 ## 🚨 Errores comunes
 
-| Error | Causa | Solución |
+| Síntoma | Causa | Solución |
 |---|---|---|
-| "Object does not exist" al suscribir | Token del System User equivocado | Usa el de ID `61592458953927` |
+| "No se muestran casos de uso de WhatsApp" | BM no configurado o sin páginas | Crea BM en business.facebook.com/create |
+| "Object does not exist" al suscribir webhooks | Token de System User equivocado | Genera token desde `61592458953927` |
 | "Invalid redirect URI" en OAuth | No agregaste el URI a la config | Agrégalo en "Valid OAuth Redirect URIs" |
-| "Permission denied" en webhook | App no está en el BM | Agrégala en business.facebook.com/settings/accounts |
-| Test WABA en popup de ESU | System User sin acceso al WABA real | Agrégalo en System User → "Add Assets" → WhatsApp Accounts |
+| "App not in BM" | App no vinculada al Business Manager | Agrégala en business.facebook.com/settings/accounts |
+| "Test WABA" en popup ESU | System User sin acceso a WABA real | Agrégalo en System User → Add Assets → WhatsApp Accounts |
