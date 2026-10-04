@@ -1,44 +1,19 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { decrypt } from "@/lib/crypto";
 
 export const runtime = "nodejs";
 
 // Helps the user figure out which System User token they should use
+// No auth required — this is a diagnostic endpoint.
 export async function POST(req: Request) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-  const admin = createAdminClient();
-  const { data: member } = await admin
-    .from("workspace_members")
-    .select("workspace_id")
-    .eq("user_id", user.id)
-    .limit(1)
-    .single();
-  if (!member) return NextResponse.json({ error: "No workspace" }, { status: 400 });
-
   const body = (await req.json().catch(() => ({}))) as { token?: string };
-  const tokenFromUser = body.token?.trim();
+  const token = body.token?.trim();
 
-  // Get stored token if no override provided
-  let token = tokenFromUser;
   if (!token) {
-    const { data: ch } = await admin
-      .from("channels")
-      .select("access_token_enc")
-      .eq("workspace_id", member.workspace_id)
-      .eq("type", "whatsapp")
-      .limit(1)
-      .maybeSingle();
-    if (!ch) return NextResponse.json({ error: "No hay canal y no se pasó token" }, { status: 400 });
-    try {
-      token = decrypt(Buffer.from(ch.access_token_enc, "base64"));
-    } catch (e) {
-      return NextResponse.json({ error: `No se pudo descifrar: ${(e as Error).message}` }, { status: 500 });
-    }
+    return NextResponse.json(
+      { error: "Pasa { token: 'EAA...' } en el body" },
+      { status: 400 },
+    );
   }
 
   const expectedAppId = process.env.NEXT_PUBLIC_META_APP_ID ?? "";
@@ -64,7 +39,7 @@ export async function POST(req: Request) {
 
   // 1. Get token owner
   try {
-    const r = await fetch(`https://graph.facebook.com/v22.0/me?access_token=${encodeURIComponent(token!)}`);
+    const r = await fetch(`https://graph.facebook.com/v22.0/me?access_token=${encodeURIComponent(token)}`);
     if (r.ok) {
       const me = (await r.json()) as { id: string; name: string };
       result.token_owner = { id: me.id, name: me.name };
@@ -77,7 +52,7 @@ export async function POST(req: Request) {
   if (expectedAppId) {
     try {
       const r = await fetch(
-        `https://graph.facebook.com/v22.0/${expectedAppId}/subscriptions?access_token=${encodeURIComponent(token!)}`,
+        `https://graph.facebook.com/v22.0/${expectedAppId}/subscriptions?access_token=${encodeURIComponent(token)}`,
       );
       result.has_app_subscription_access = r.ok;
       if (!r.ok) {
@@ -96,7 +71,7 @@ export async function POST(req: Request) {
   // 3. Test page access
   try {
     const r = await fetch(
-      `https://graph.facebook.com/v22.0/me/accounts?access_token=${encodeURIComponent(token!)}`,
+      `https://graph.facebook.com/v22.0/me/accounts?access_token=${encodeURIComponent(token)}`,
     );
     if (r.ok) {
       const j = (await r.json()) as { data: Array<{ id: string; name: string }> };
@@ -117,7 +92,7 @@ export async function POST(req: Request) {
   // 4. Test WABA access
   try {
     const r = await fetch(
-      `https://graph.facebook.com/v22.0/2017363685552310?access_token=${encodeURIComponent(token!)}`,
+      `https://graph.facebook.com/v22.0/2017363685552310?access_token=${encodeURIComponent(token)}`,
     );
     result.has_waba_access = r.ok;
     if (!r.ok) {
@@ -134,7 +109,7 @@ export async function POST(req: Request) {
   // 5. Test business manager access
   try {
     const r = await fetch(
-      `https://graph.facebook.com/v22.0/me/businesses?access_token=${encodeURIComponent(token!)}`,
+      `https://graph.facebook.com/v22.0/me/businesses?access_token=${encodeURIComponent(token)}`,
     );
     if (r.ok) {
       const j = (await r.json()) as { data: unknown[] };
