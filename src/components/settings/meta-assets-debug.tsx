@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Loader2, RefreshCw, Wrench } from "lucide-react";
+import { Loader2, RefreshCw, Wrench, FlaskConical } from "lucide-react";
 import { toast } from "sonner";
 
 type DebugData = {
@@ -89,12 +89,44 @@ export function MetaAssetsDebug() {
     <div className="space-y-6">
       <EncryptionStatusPanel status={encStatus} onRefresh={fetchEnc} />
       <FixAppAccessButton onSuccess={fetchData} />
+      <SimulateWebhookButton />
       <MetaAssetsBody
         loading={loading}
         error={error}
         data={data}
         onRefresh={fetchData}
       />
+    </div>
+  );
+}
+
+function SimulateWebhookButton() {
+  const [busy, setBusy] = useState(false);
+  const onClick = async () => {
+    setBusy(true);
+    try {
+      const r = await fetch("/api/debug/simulate-webhook", { method: "POST" });
+      const j = await r.json();
+      if (j.ok) toast.success(`Simulado: ${j.messages_processed} mensaje(s) procesado(s)`);
+      else toast.error(j.error ?? "Error");
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="rounded-md border bg-amber-50 p-3 text-xs space-y-2">
+      <div className="font-semibold uppercase tracking-wide">Probar webhook</div>
+      <p className="text-muted-foreground">
+        Simula un mensaje entrante real para verificar que el pipeline completo funciona
+        (guarda contacto, conversación, mensaje en DB). Útil cuando no puedes enviar un WA
+        de prueba.
+      </p>
+      <Button onClick={onClick} disabled={busy} size="sm" variant="outline">
+        {busy ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : <FlaskConical className="mr-2 h-3 w-3" />}
+        Simular mensaje entrante
+      </Button>
     </div>
   );
 }
