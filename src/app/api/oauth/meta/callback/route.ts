@@ -68,7 +68,17 @@ export async function GET(req: NextRequest) {
       if (next && next === after) throw new Error("Meta repitió la paginación. Intenta conectar nuevamente.");
       after = next;
     } while (after);
-    if (!pages.length) return finish({ error: "Meta no autorizó ninguna página. Selecciona PM Solution al conectar." });
+    if (!pages.length) {
+      let meInfo = "desconocida";
+      try {
+        const meRes = await fetch(`${GRAPH}/me?access_token=${encodeURIComponent(token)}`);
+        if (meRes.ok) {
+          const me = z.object({ id: z.string(), name: z.string().optional() }).parse(await meRes.json());
+          meInfo = `${me.name ?? "(sin nombre)"} (id ${me.id})`;
+        } else meInfo = `error ${meRes.status}`;
+      } catch { /* ignore */ }
+      return finish({ error: `Meta no autorizó ninguna página. Tu sesión de Facebook es "${meInfo}". Asegúrate de iniciar con la MISMA cuenta Facebook que admin "PM Solution" (en developers.facebook.com y facebook.com/pages, no solo en Business Manager).` });
+    }
 
     const admin = createAdminClient();
     for (const page of pages) {
