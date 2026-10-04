@@ -331,7 +331,12 @@ export async function connectFacebookPageManualAction(
     });
     const body = await r.json().catch(() => ({}));
     if (!r.ok || (body as any).success !== true) {
-      warnings.push("Página guardada, pero la suscripción a webhooks falló. Actívala manualmente en developers.facebook.com → tu app → Webhooks.");
+      warnings.push(
+        "Suscripción automática a webhooks no completó. Tu app probablemente está en modo " +
+        "\"En desarrollo\" (developers.facebook.com → tu app → Settings → Basic). " +
+        "Meta no entrega webhooks de producción hasta que la app se publique. " +
+        "Mientras tanto, suscríbete manualmente en Webhooks → Page, y envía un evento de prueba para confirmar que el endpoint responde.",
+      );
     }
   } catch (e) {
     warnings.push(`Suscripción a webhooks: ${(e as Error).message}`);
