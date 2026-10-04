@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { updateSession } from "@/lib/supabase/middleware";
 
-const PUBLIC_PATHS = ["/login", "/signup", "/forgot-password", "/auth"];
+const PUBLIC_PATHS = ["/login", "/signup", "/forgot-password", "/auth", "/api/debug/find-system-user"];
 const AUTH_PREFIXES = ["/accept-invite"];
 
 export async function proxy(request: NextRequest) {
