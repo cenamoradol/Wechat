@@ -61,9 +61,8 @@ export async function sendMessageAction(
     .maybeSingle();
   if (!member) return { error: "Sin acceso a este workspace" };
 
-  const cc = (conv as any).contact_channels?.[0];
-  const ch = cc?.channels?.[0];
-  if (!cc || !ch) return { error: "Canal no encontrado" };
+  if (!cc) return { error: "Canal no encontrado" };
+  const ch = (cc as any).channels;
 
   // 3. Decrypt channel token
   let token: string;
