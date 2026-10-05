@@ -19,6 +19,12 @@ const SignupSchema = z.object({
   next: z.string().optional(),
 });
 
+function absoluteUrl(path: string): string {
+  const base = (process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000").replace(/\/$/, "");
+  const cleanPath = path.startsWith("/") ? path : `/${path}`;
+  return `${base}${cleanPath}`;
+}
+
 const ForgotSchema = z.object({
   email: z.string().email(),
 });
@@ -57,7 +63,14 @@ export async function signupAction(input: z.infer<typeof SignupSchema>): Promise
   const { data, error } = await supabase.auth.signUp({
     email: parsed.data.email,
     password: parsed.data.password,
-    options: { data: { full_name: parsed.data.full_name } },
+    options: {
+      data: { full_name: parsed.data.full_name },
+      // Use the production domain so the verification email link works
+      // correctly. Fall back to /onboarding for fresh accounts.
+      emailRedirectTo: parsed.data.next
+        ? absoluteUrl(parsed.data.next)
+        : absoluteUrl("/onboarding"),
+    },
   });
   if (error) return { error: error.message };
 
