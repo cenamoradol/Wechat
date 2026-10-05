@@ -221,7 +221,10 @@ async function ActiveThread({ conversationId }: { conversationId: string }) {
         </div>
         <Badge variant="outline">{channel?.display_name ?? channelType}</Badge>
       </header>
-      <MessagesList messages={(messages ?? []) as any} />
+      <MessagesList
+        conversationId={conversationId}
+        initialMessages={(messages ?? []) as any}
+      />
       <ReplyBox conversationId={conversationId} />
     </>
   );

@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import { createClient } from "@/lib/supabase/browser";
 import { cn } from "@/lib/utils";
 
 type Message = {
@@ -10,6 +11,7 @@ type Message = {
   text: string | null;
   status: string | null;
   created_at: string;
+  external_id?: string | null;
 };
 
 function statusIcon(status: string | null | undefined) {
@@ -61,14 +63,63 @@ function MessageBubble({ message }: { message: Message }) {
   );
 }
 
-export function MessagesList({ messages }: { messages: Message[] }) {
+export function MessagesList({
+  conversationId,
+  initialMessages,
+}: {
+  conversationId: string;
+  initialMessages: Message[];
+}) {
+  const [messages, setMessages] = useState<Message[]>(initialMessages);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const conversationIdRef = useRef(conversationId);
+  conversationIdRef.current = conversationId;
 
-  // Auto-scroll to the bottom when messages change
+  // Reset messages when the conversation changes
+  useEffect(() => {
+    setMessages(initialMessages);
+  }, [conversationId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Subscribe to new messages for this conversation
+  useEffect(() => {
+    const supabase = createClient();
+    const channel = supabase
+      .channel(`messages:${conversationId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "messages",
+          filter: `conversation_id=eq.${conversationId}`,
+        },
+        (payload) => {
+          const newMsg = payload.new as Message;
+          setMessages((prev) => {
+            // Avoid duplicates if the row was already in initial data
+            if (prev.some((m) => m.id === newMsg.id)) return prev;
+            // Avoid duplicates by external_id too
+            if (
+              newMsg.external_id &&
+              prev.some((m) => m.external_id === newMsg.external_id)
+            ) {
+              return prev;
+            }
+            return [...prev, newMsg];
+          });
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [conversationId]);
+
+  // Auto-scroll to bottom on new messages
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
-    // Use rAF so the DOM has updated with the new messages
     requestAnimationFrame(() => {
       el.scrollTop = el.scrollHeight;
     });
