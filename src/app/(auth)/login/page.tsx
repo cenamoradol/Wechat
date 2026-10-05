@@ -11,9 +11,9 @@ import Link from "next/link";
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ next?: string }>;
+  searchParams: Promise<{ next?: string; reset?: string }>;
 }) {
-  const { next } = await searchParams;
+  const { next, reset } = await searchParams;
   const nextParam = next ? `?next=${encodeURIComponent(next)}` : "";
   return (
     <Card className="w-full max-w-md">
@@ -22,6 +22,11 @@ export default async function LoginPage({
         <CardDescription>Entra a tu workspace de Wechat</CardDescription>
       </CardHeader>
       <CardContent>
+        {reset === "ok" && (
+          <div className="mb-4 rounded-md border border-green-200 bg-green-50 p-3 text-sm text-green-900">
+            Contraseña cambiada con éxito. Inicia sesión con tu nueva contraseña.
+          </div>
+        )}
         <LoginForm next={next} />
         <p className="mt-4 text-center text-sm text-muted-foreground">
           ¿No tienes cuenta?{" "}
