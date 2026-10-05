@@ -3,14 +3,10 @@ import { unstable_noStore } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { formatDistanceToNow } from "date-fns";
-import { es } from "date-fns/locale";
-import Link from "next/link";
 import { MessageSquare, Hash, AtSign, Mail } from "lucide-react";
-import { cn } from "@/lib/utils";
 import { ReplyBox } from "@/components/inbox/reply-box";
 import { MessagesList } from "@/components/inbox/messages-list";
-import { InboxRealtimeSync } from "@/components/inbox/inbox-realtime-sync";
+import { ConversationsSidebar } from "@/components/inbox/conversations-sidebar";
 
 type Conversation = {
   id: string;
@@ -77,84 +73,9 @@ export default async function InboxPage({
 
   return (
     <div className="flex h-full min-h-0">
-      {/* Realtime: refresh on new messages or conversation updates */}
-      <InboxRealtimeSync conversationId={activeConv?.id} />
-
-      {/* Left column: conversation list */}
+      {/* Left column: conversation list (client component, polls + realtime) */}
       <aside className="hidden w-80 shrink-0 border-r md:flex md:flex-col min-h-0">
-        <div className="border-b p-3">
-          <h2 className="text-sm font-semibold">Inbox</h2>
-          <p className="text-xs text-muted-foreground">
-            {convList.length} conversación{convList.length === 1 ? "" : "es"}
-          </p>
-        </div>
-        <div className="flex-1 overflow-y-auto">
-          {convList.length === 0 ? (
-            <div className="p-6 text-center text-sm text-muted-foreground">
-              <MessageSquare className="mx-auto mb-2 h-8 w-8 opacity-30" />
-              No hay conversaciones todavía.
-              <br />
-              Envía un mensaje a tu número de WhatsApp para probar.
-            </div>
-          ) : (
-            <ul className="divide-y">
-              {convList.map((c) => {
-                const contact = c.contact_channels?.contacts;
-                const channelType = c.contact_channels?.channels?.type ?? "whatsapp";
-                const isActive = c.id === activeIdToUse;
-                const name =
-                  contact?.full_name ||
-                  contact?.phone_e164 ||
-                  contact?.email ||
-                  c.contact_channels?.external_user_id ||
-                  "Sin nombre";
-                return (
-                  <li key={c.id}>
-                    <Link
-                      href={`/inbox?conversation=${c.id}`}
-                      className={cn(
-                        "flex items-start gap-2 p-3 transition-colors hover:bg-muted/50",
-                        isActive && "bg-muted",
-                      )}
-                    >
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-lg">
-                        {CHANNEL_ICONS[channelType] ?? "💬"}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="truncate text-sm font-medium">
-                            {name}
-                          </span>
-                          <span className="shrink-0 text-[10px] text-muted-foreground">
-                            {formatDistanceToNow(new Date(c.last_message_at), {
-                              addSuffix: true,
-                              locale: es,
-                            })}
-                          </span>
-                        </div>
-                        {c.last_message_preview && (
-                          <p className="truncate text-xs text-muted-foreground">
-                            {c.last_message_preview}
-                          </p>
-                        )}
-                        <div className="mt-1 flex items-center gap-1">
-                          <span className="rounded bg-muted px-1.5 py-0.5 text-[10px]">
-                            {CHANNEL_LABELS[channelType] ?? channelType}
-                          </span>
-                          {(c.unread_count ?? 0) > 0 && (
-                            <Badge variant="default" className="h-4 px-1 text-[10px]">
-                              {c.unread_count}
-                            </Badge>
-                          )}
-                        </div>
-                      </div>
-                    </Link>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </div>
+        <ConversationsSidebar initialConversations={convList as any} activeId={activeConv?.id} />
       </aside>
 
       {/* Center column: active thread */}
