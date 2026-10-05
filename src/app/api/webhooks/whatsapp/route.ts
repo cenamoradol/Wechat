@@ -36,10 +36,12 @@ export async function POST(req: NextRequest) {
   const p = payload as {
     entry?: Array<{ changes?: Array<{ value?: { statuses?: unknown[] } }> }>;
   };
+  let statusEntries = 0;
   for (const entry of p.entry ?? []) {
     for (const change of entry.changes ?? []) {
       const value = change.value;
       if (value?.statuses?.length) {
+        statusEntries += value.statuses.length;
         try {
           await processOutboundStatuses("whatsapp", value as Parameters<typeof processOutboundStatuses>[1]);
         } catch (e) {
@@ -48,6 +50,12 @@ export async function POST(req: NextRequest) {
       }
     }
   }
+  // Marker so we can see whether the statuses path was even reached
+  await logWebhookEvent({
+    type: "debug:wa-status-scan",
+    payload: { status_entries_found: statusEntries, has_entry: !!p.entry?.length },
+    processed: true,
+  });
 
   for (const m of messages) {
     try {
