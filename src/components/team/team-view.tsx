@@ -118,6 +118,7 @@ export function TeamView({
   };
 
   const pendingInvites = invites.filter((i) => !i.accepted_at && new Date(i.expires_at) > new Date());
+  const expiredInvites = invites.filter((i) => !i.accepted_at && new Date(i.expires_at) <= new Date());
   const acceptedInvites = invites.filter((i) => i.accepted_at);
 
   return (
@@ -294,6 +295,61 @@ export function TeamView({
                 </tbody>
               </table>
             )}
+          </div>
+        </section>
+      )}
+
+      {/* Aceptadas + Expiradas — solo visible si hay */}
+      {isManager && (acceptedInvites.length > 0 || expiredInvites.length > 0) && (
+        <section className="space-y-3">
+          <h2 className="text-sm font-semibold uppercase text-muted-foreground">
+            Historial de invitaciones
+          </h2>
+          <div className="overflow-hidden rounded-lg border bg-card">
+            <table className="w-full text-sm">
+              <thead className="border-b bg-muted/40 text-left text-xs uppercase text-muted-foreground">
+                <tr>
+                  <th className="px-4 py-2.5">Email</th>
+                  <th className="px-4 py-2.5">Estado</th>
+                  <th className="px-4 py-2.5">Fecha</th>
+                  <th className="px-4 py-2.5 text-right">Acción</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {acceptedInvites.map((inv) => (
+                  <tr key={inv.id}>
+                    <td className="px-4 py-3 text-muted-foreground">{inv.email ?? "—"}</td>
+                    <td className="px-4 py-3">
+                      <Badge className="bg-green-100 text-green-800">Aceptada</Badge>
+                    </td>
+                    <td className="px-4 py-3 text-xs text-muted-foreground">
+                      {inv.accepted_at ? new Date(inv.accepted_at).toLocaleString() : "—"}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <Button variant="ghost" size="icon" onClick={() => onRevoke(inv.id)} title="Eliminar del historial">
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+                {expiredInvites.map((inv) => (
+                  <tr key={inv.id}>
+                    <td className="px-4 py-3 text-muted-foreground">{inv.email ?? "—"}</td>
+                    <td className="px-4 py-3">
+                      <Badge variant="outline">Expirada</Badge>
+                    </td>
+                    <td className="px-4 py-3 text-xs text-muted-foreground">
+                      {new Date(inv.expires_at).toLocaleDateString()}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <Button variant="ghost" size="icon" onClick={() => onRevoke(inv.id)} title="Eliminar">
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </section>
       )}
