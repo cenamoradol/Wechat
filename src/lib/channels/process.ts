@@ -136,7 +136,20 @@ export async function processInbound(m: NormalizedMessage): Promise<void> {
     raw_payload: m.raw as unknown as Record<string, unknown>,
     status: "delivered",
   }, { onConflict: "conversation_id,external_id" });
-  if (msgErr) console.error("message upsert failed", msgErr);
+  if (msgErr) {
+    console.error("message upsert failed", {
+      msgErr: msgErr.message,
+      conversation_id: conv.id,
+      external_id: m.messageExternalId,
+      type: m.type,
+    });
+    await admin.from("webhook_events").insert({
+      type: `error:message-upsert:${m.channelType}`,
+      payload: { err: msgErr.message, conversation_id: conv.id, external_id: m.messageExternalId },
+      processed: false,
+      error: msgErr.message,
+    });
+  }
 }
 
 export async function logWebhookEvent(args: {
