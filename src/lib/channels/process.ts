@@ -157,6 +157,51 @@ export async function processInbound(m: NormalizedMessage): Promise<void> {
   }
 }
 
+/**
+ * Process outbound message status updates from Meta webhooks.
+ *
+ * WhatsApp/Messenger/Instagram webhooks deliver delivery & read events as
+ * `statuses` entries inside the same payload (NOT as a separate field).
+ * Each entry has shape:
+ *   { id: string, status: "sent" | "delivered" | "read" | "failed", timestamp: string|number, recipient_id?: string }
+ *
+ * We update the matching OUTBOUND message by external_id.
+ */
+export async function processOutboundStatuses(
+  channelType: "whatsapp" | "facebook" | "instagram",
+  value: { statuses?: Array<{ id?: string; status?: string; timestamp?: string | number }> } | null | undefined,
+): Promise<void> {
+  if (!value?.statuses?.length) return;
+  const admin = createAdminClient();
+  for (const s of value.statuses) {
+    if (!s.id || !s.status) continue;
+    const ts = s.timestamp
+      ? new Date(typeof s.timestamp === "number" ? s.timestamp * 1000 : s.timestamp)
+      : new Date();
+    const updates: { status?: string; read_at?: string } = {};
+    if (s.status === "read") {
+      updates.read_at = ts.toISOString();
+      updates.status = "read";
+    } else if (s.status === "delivered") {
+      updates.status = "delivered";
+    } else if (s.status === "sent") {
+      updates.status = "sent";
+    } else if (s.status === "failed") {
+      updates.status = "failed";
+    }
+    if (Object.keys(updates).length === 0) continue;
+    await admin
+      .from("messages")
+      .update(updates)
+      .eq("external_id", s.id)
+      .eq("direction", "out")
+      .select("id")
+      .then((res) => {
+        if (res.error) console.error("outbound status update failed", res.error);
+      });
+  }
+}
+
 export async function logWebhookEvent(args: {
   channelId?: string;
   type: string;

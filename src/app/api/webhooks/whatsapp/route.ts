@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyMetaSignature } from "@/lib/meta/verify-signature";
 import { getAdapter } from "@/lib/channels";
-import { processInbound, logWebhookEvent } from "@/lib/channels/process";
+import { processInbound, processOutboundStatuses, logWebhookEvent } from "@/lib/channels/process";
 
 export async function GET(req: NextRequest) {
   const adapter = getAdapter("whatsapp");
@@ -30,6 +30,24 @@ export async function POST(req: NextRequest) {
   const adapter = getAdapter("whatsapp");
   const messages = adapter.parseInbound(payload);
   await logWebhookEvent({ type: "whatsapp", payload, processed: true });
+
+  // Outbound message status updates (delivered / read) come in the same
+  // payload under value.statuses — process them so blue ticks appear.
+  const p = payload as {
+    entry?: Array<{ changes?: Array<{ value?: { statuses?: unknown[] } }> }>;
+  };
+  for (const entry of p.entry ?? []) {
+    for (const change of entry.changes ?? []) {
+      const value = change.value;
+      if (value?.statuses?.length) {
+        try {
+          await processOutboundStatuses("whatsapp", value as Parameters<typeof processOutboundStatuses>[1]);
+        } catch (e) {
+          console.error("processOutboundStatuses failed", e);
+        }
+      }
+    }
+  }
 
   for (const m of messages) {
     try {
