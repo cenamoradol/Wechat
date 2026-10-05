@@ -136,6 +136,11 @@ export async function processInbound(m: NormalizedMessage): Promise<void> {
     raw_payload: m.raw as unknown as Record<string, unknown>,
     status: "delivered",
   }, { onConflict: "conversation_id,external_id" });
+
+  // 6. Recompute unread_count atomically from the messages table (only for inbound)
+  if (m.direction === "in") {
+    await admin.rpc("recompute_unread_count", { p_conversation_id: conv.id });
+  }
   if (msgErr) {
     console.error("message upsert failed", {
       msgErr: msgErr.message,

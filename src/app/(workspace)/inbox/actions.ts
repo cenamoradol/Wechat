@@ -149,9 +149,13 @@ export async function markAsReadAction(conversationId: string): Promise<void> {
   } = await supabase.auth.getUser();
   if (!user) return;
   const admin = createAdminClient();
+  const now = new Date().toISOString();
   await admin
-    .from("conversations")
-    .update({ unread_count: 0 })
-    .eq("id", conversationId);
+    .from("messages")
+    .update({ read_at: now })
+    .eq("conversation_id", conversationId)
+    .eq("direction", "in")
+    .is("read_at", null);
+  await admin.rpc("recompute_unread_count", { p_conversation_id: conversationId });
   revalidatePath("/inbox");
 }

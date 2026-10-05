@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/browser";
 import { cn } from "@/lib/utils";
+import { markAsReadAction } from "@/app/(workspace)/inbox/actions";
 
 type Message = {
   id: string;
@@ -12,33 +13,29 @@ type Message = {
   status: string | null;
   created_at: string;
   external_id?: string | null;
+  read_at?: string | null;
 };
 
-function statusIcon(status: string | null | undefined) {
-  switch (status) {
-    case "sent":
-      return "✓";
-    case "delivered":
-      return "✓✓";
-    case "read":
-      return "✓✓";
-    case "failed":
-      return "✕";
-    default:
-      return "";
-  }
+function OutStatus({ status, isRead }: { status: string | null | undefined; isRead: boolean }) {
+  if (isRead) return <span className="text-sky-300">✓✓</span>;
+  if (status === "failed") return <span className="text-red-300">✕</span>;
+  if (status === "delivered") return <span>✓✓</span>;
+  return <span>✓</span>;
 }
 
 function MessageBubble({ message }: { message: Message }) {
   const isOut = message.direction === "out";
+  const isRead = isOut && !!message.read_at;
+  const isUnread = !isOut && !message.read_at;
   return (
     <div className={`flex ${isOut ? "justify-end" : "justify-start"}`}>
       <div
         className={cn(
-          "max-w-[70%] rounded-2xl px-3 py-2 text-sm shadow-sm",
+          "max-w-[70%] rounded-2xl px-3 py-2 text-sm shadow-sm transition-colors",
           isOut
             ? "rounded-br-sm bg-primary text-primary-foreground"
             : "rounded-bl-sm bg-background",
+          isUnread && "ring-2 ring-blue-400/70 font-medium",
         )}
       >
         <p className="whitespace-pre-wrap break-words">
@@ -56,7 +53,7 @@ function MessageBubble({ message }: { message: Message }) {
               minute: "2-digit",
             })}
           </time>
-          {isOut && <span>{statusIcon(message.status)}</span>}
+          {isOut && <OutStatus status={message.status} isRead={isRead} />}
         </div>
       </div>
     </div>
@@ -72,7 +69,6 @@ function dedupeAndMerge(prev: Message[], incoming: Message[]): Message[] {
   for (const m of incoming) {
     if (!map.has(m.id)) map.set(m.id, m);
   }
-  // Keep array sorted by created_at ASC for chronological order
   return [...map.values()].sort(
     (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
   );
@@ -88,11 +84,31 @@ export function MessagesList({
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [liveMode, setLiveMode] = useState<"realtime" | "polling" | "off">("realtime");
   const scrollRef = useRef<HTMLDivElement>(null);
+  const markedRef = useRef<string | null>(null);
 
-  // Reset messages when the active conversation changes
+  // Reset messages + scroll when active conversation changes
   useEffect(() => {
     setMessages(initialMessages);
+    markedRef.current = conversationId;
+    requestAnimationFrame(() => {
+      const el = scrollRef.current;
+      if (el) el.scrollTop = el.scrollHeight;
+    });
   }, [conversationId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Mark messages as read whenever the thread is shown or new inbound messages arrive
+  useEffect(() => {
+    const hasUnread = messages.some((m) => m.direction === "in" && !m.read_at);
+    if (!hasUnread) return;
+    void markAsReadAction(conversationId).then(() => {
+      // Local state: mark inbound messages as read so the UI updates without waiting for refresh
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.direction === "in" && !m.read_at ? { ...m, read_at: new Date().toISOString() } : m,
+        ),
+      );
+    });
+  }, [conversationId, messages]);
 
   // Polling fallback (always runs as a safety net)
   useEffect(() => {
@@ -113,7 +129,7 @@ export function MessagesList({
           setMessages((prev) => dedupeAndMerge(prev, json.messages));
         }
       } catch {
-        /* swallow — keep polling */
+        /* swallow */
       } finally {
         if (!cancelled) timer = setTimeout(tick, POLL_INTERVAL_MS);
       }
@@ -123,9 +139,9 @@ export function MessagesList({
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
-  }, [conversationId, messages.length]); // re-arm when conversation changes or when new messages arrive (so sinceISO stays correct)
+  }, [conversationId, messages.length]);
 
-  // Realtime subscription (best-effort; polling is the source of truth)
+  // Realtime subscription (best-effort)
   useEffect(() => {
     const supabase = createClient();
     const channel = supabase
@@ -133,18 +149,24 @@ export function MessagesList({
       .on(
         "postgres_changes",
         {
-          event: "INSERT",
+          event: "*",
           schema: "public",
           table: "messages",
           filter: `conversation_id=eq.${conversationId}`,
         },
         (payload) => {
-          const newMsg = payload.new as Message;
-          setMessages((prev) => dedupeAndMerge(prev, [newMsg]));
+          // INSERT: new message arrived; UPDATE: e.g. read_at was set externally
+          const next = payload.new as Message;
+          setMessages((prev) => {
+            const idx = prev.findIndex((m) => m.id === next.id);
+            if (idx === -1) return dedupeAndMerge(prev, [next]);
+            const copy = prev.slice();
+            copy[idx] = next;
+            return copy;
+          });
         },
       )
       .subscribe((status) => {
-        // Fall back to polling-only if WebSocket fails
         if (status === "SUBSCRIBED") setLiveMode("realtime");
         else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
           setLiveMode("polling");

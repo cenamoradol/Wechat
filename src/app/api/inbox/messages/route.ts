@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
 
   let query = supabase
     .from("messages")
-    .select("id, direction, type, text, status, created_at, external_id")
+    .select("id, direction, type, text, status, created_at, external_id, read_at")
     .eq("conversation_id", conversationId)
     .order("created_at", { ascending: true })
     .limit(200);

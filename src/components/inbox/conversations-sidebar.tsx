@@ -156,13 +156,27 @@ export function ConversationsSidebar({
                       </span>
                     </div>
                     {c.last_message_preview && (
-                      <p className="truncate text-xs text-muted-foreground">
+                      <p
+                        className={cn(
+                          "truncate text-xs",
+                          c.unread_count > 0
+                            ? "font-semibold text-foreground"
+                            : "text-muted-foreground",
+                        )}
+                      >
                         {c.last_message_preview}
                       </p>
                     )}
-                    <span className="mt-1 inline-block rounded bg-muted px-1.5 py-0.5 text-[10px]">
-                      {CHANNEL_LABELS[channelType] ?? channelType}
-                    </span>
+                    <div className="mt-1 flex items-center gap-1">
+                      <span className="rounded bg-muted px-1.5 py-0.5 text-[10px]">
+                        {CHANNEL_LABELS[channelType] ?? channelType}
+                      </span>
+                      {c.unread_count > 0 && (
+                        <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-blue-500 px-1.5 text-[10px] font-semibold text-white">
+                          {c.unread_count}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </Link>
               </li>

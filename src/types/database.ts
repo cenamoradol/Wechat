@@ -259,6 +259,7 @@ export type Database = {
           error_message: string | null;
           raw_payload: Record<string, unknown> | null;
           sent_by: string | null;
+          read_at: string | null;
           created_at: string;
         };
         Insert: {
@@ -282,6 +283,7 @@ export type Database = {
           status: string;
           error_code: string | null;
           error_message: string | null;
+          read_at: string | null;
         }>;
         Relationships: [];
       };
@@ -316,7 +318,12 @@ export type Database = {
       };
     };
     Views: Record<string, never>;
-    Functions: Record<string, never>;
+    Functions: {
+      recompute_unread_count: {
+        Args: { p_conversation_id: string };
+        Returns: void;
+      };
+    };
     Enums: {
       workspace_role: "owner" | "admin" | "agent" | "viewer";
       channel_type: "whatsapp" | "facebook" | "instagram";

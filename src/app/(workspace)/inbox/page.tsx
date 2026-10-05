@@ -109,7 +109,7 @@ async function ActiveThread({ conversationId }: { conversationId: string }) {
 
   const { data: messages, error: msgErr } = await adminSupabase
     .from("messages")
-    .select("id, direction, type, text, status, created_at, sent_by")
+    .select("id, direction, type, text, status, created_at, sent_by, read_at, external_id")
     .eq("conversation_id", conversationId)
     .order("created_at", { ascending: true })
     .limit(200);
