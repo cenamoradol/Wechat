@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { getActiveWorkspaceIdAction } from "@/app/(workspace)/actions";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -8,6 +9,23 @@ import { getAdapter } from "@/lib/channels";
 import { decrypt, encrypt } from "@/lib/crypto";
 
 export type ChannelActionResult = { error?: string; success?: string };
+
+async function requireActiveWorkspaceMember() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Unauthorized" as const };
+  const admin = createAdminClient();
+  const workspaceId = await getActiveWorkspaceIdAction();
+  if (!workspaceId) return { error: "No tienes workspace activo" as const };
+  const { data: member } = await admin
+    .from("workspace_members")
+    .select("workspace_id, role")
+    .eq("workspace_id", workspaceId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (!member) return { error: "Sin acceso al workspace activo" as const };
+  return { supabase, user, admin, member, workspaceId };
+}
 
 export async function updateChannelTokenAction(
   channelId: string,
@@ -250,18 +268,9 @@ export async function connectFacebookPageManualAction(
   const parsed = ManualFBPageSchema.safeParse(input);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
 
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: "Unauthorized" };
-
-  const admin = createAdminClient();
-  const { data: member } = await admin
-    .from("workspace_members")
-    .select("workspace_id, role")
-    .eq("user_id", user.id)
-    .limit(1)
-    .single();
-  if (!member) return { error: "No tienes workspace" };
+  const ctx = await requireActiveWorkspaceMember();
+  if ("error" in ctx) return { error: ctx.error };
+  const { user, admin, member, workspaceId } = ctx;
   if (!["owner", "admin"].includes(member.role)) return { error: "Sin permiso para conectar canales" };
 
   // 1. Verify token + page via /{page-id}, and upgrade to Page Access Token
@@ -290,7 +299,7 @@ export async function connectFacebookPageManualAction(
   const { error: fbSaveErr } = await admin
     .from("channels")
     .upsert({
-      workspace_id: member.workspace_id,
+      workspace_id: workspaceId,
       type: "facebook",
       external_id: page.id,
       display_name: parsed.data.display_name ?? page.name ?? `FB ${page.id.slice(-6)}`,
@@ -309,7 +318,7 @@ export async function connectFacebookPageManualAction(
     const igId = page.instagram_business_account.id;
     const igMeta = { page_id: page.id, username: page.instagram_business_account.username ?? null };
     const { error: igErr } = await admin.from("channels").upsert({
-      workspace_id: member.workspace_id,
+      workspace_id: workspaceId,
       type: "instagram",
       external_id: igId,
       display_name: `@${page.instagram_business_account.username ?? igId}`,
@@ -370,13 +379,8 @@ export async function connectWhatsAppManualAction(
   if (!user) return { error: "Unauthorized" };
 
   const admin = createAdminClient();
-  const { data: member } = await admin
-    .from("workspace_members")
-    .select("workspace_id")
-    .eq("user_id", user.id)
-    .limit(1)
-    .single();
-  if (!member) return { error: "No tienes workspace" };
+  const workspaceId = await getActiveWorkspaceIdAction();
+  if (!workspaceId) return { error: "No tienes workspace activo" };
 
   const adapter = getAdapter("whatsapp");
 
@@ -396,7 +400,7 @@ export async function connectWhatsAppManualAction(
     .from("channels")
     .upsert(
       {
-        workspace_id: member.workspace_id,
+        workspace_id: workspaceId,
         type: "whatsapp",
         external_id: parsed.data.phone_number_id,
         display_name: parsed.data.display_name ?? `WA ${parsed.data.phone_number_id.slice(-6)}`,

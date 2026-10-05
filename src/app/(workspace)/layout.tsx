@@ -2,6 +2,10 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Topbar } from "@/components/layout/topbar";
+import {
+  listUserWorkspacesAction,
+  getActiveWorkspaceIdAction,
+} from "@/app/(workspace)/actions";
 
 export default async function WorkspaceLayout({
   children,
@@ -21,21 +25,31 @@ export default async function WorkspaceLayout({
     .eq("id", user.id)
     .single();
 
-  const { data: memberships } = await supabase
+  const memberships = await supabase
     .from("workspace_members")
     .select("workspace_id")
     .eq("user_id", user.id)
     .limit(1);
 
-  if (!memberships || memberships.length === 0) {
+  if (!memberships.data || memberships.data.length === 0) {
     redirect("/onboarding");
   }
+
+  const [workspaces, activeWorkspaceId] = await Promise.all([
+    listUserWorkspacesAction(),
+    getActiveWorkspaceIdAction(),
+  ]);
 
   return (
     <div className="flex h-screen bg-background">
       <Sidebar />
       <div className="flex min-w-0 flex-1 flex-col">
-        <Topbar userName={profile?.full_name ?? undefined} userEmail={user.email ?? undefined} />
+        <Topbar
+          userName={profile?.full_name ?? undefined}
+          userEmail={user.email ?? undefined}
+          workspaces={workspaces}
+          activeWorkspaceId={activeWorkspaceId ?? undefined}
+        />
         <main className="flex-1 overflow-auto">{children}</main>
       </div>
     </div>

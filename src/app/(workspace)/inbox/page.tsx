@@ -47,15 +47,12 @@ export default async function InboxPage({
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  // Get user's workspace
+  // Get user's active workspace (set by topbar dropdown)
   const adminSupabase = (await import("@/lib/supabase/admin")).createAdminClient();
-  const { data: member } = await adminSupabase
-    .from("workspace_members")
-    .select("workspace_id")
-    .eq("user_id", user.id)
-    .limit(1)
-    .maybeSingle();
-  if (!member) redirect("/onboarding");
+  const { getActiveWorkspaceIdAction } = await import("@/app/(workspace)/actions");
+  const activeWorkspaceId = await getActiveWorkspaceIdAction();
+  if (!activeWorkspaceId) redirect("/onboarding");
+  const member = { workspace_id: activeWorkspaceId };
 
   // List conversations
   const { data: conversations } = await adminSupabase

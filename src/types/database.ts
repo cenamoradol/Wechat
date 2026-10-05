@@ -83,7 +83,7 @@ export type Database = {
         };
         Insert: {
           workspace_id: string;
-          email: string;
+          email?: string | null;
           role?: Database["public"]["Enums"]["workspace_role"];
           token: string;
           invited_by?: string | null;
@@ -93,6 +93,7 @@ export type Database = {
           email?: string;
           role?: Database["public"]["Enums"]["workspace_role"];
           accepted_at?: string | null;
+          accepted_by?: string | null;
         };
         Relationships: [];
       };

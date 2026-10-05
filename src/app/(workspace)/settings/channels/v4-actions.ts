@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { encrypt } from "@/lib/crypto";
 import { graphGet } from "@/lib/meta/oauth";
+import { getActiveWorkspaceIdAction } from "@/app/(workspace)/actions";
 
 const Schema = z.object({
   code: z.string().min(5),
@@ -29,13 +30,8 @@ export async function completeEmbeddedSignupV4Action(
   if (!user) return { error: "Unauthorized" };
 
   const admin = createAdminClient();
-  const { data: member } = await admin
-    .from("workspace_members")
-    .select("workspace_id")
-    .eq("user_id", user.id)
-    .limit(1)
-    .single();
-  if (!member) return { error: "No tienes workspace" };
+  const workspaceId = await getActiveWorkspaceIdAction();
+  if (!workspaceId) return { error: "No tienes workspace activo" };
 
   const appId = process.env.NEXT_PUBLIC_META_APP_ID;
   const appSecret = process.env.META_APP_SECRET;
@@ -64,7 +60,7 @@ export async function completeEmbeddedSignupV4Action(
   if (parsed.data.phone_number_id && parsed.data.waba_id) {
     const { error: waErr } = await admin.from("channels").upsert(
       {
-        workspace_id: member.workspace_id,
+        workspace_id: workspaceId,
         type: "whatsapp",
         external_id: parsed.data.phone_number_id,
         display_name: `WA ${parsed.data.phone_number_id.slice(-6)}`,
@@ -87,7 +83,7 @@ export async function completeEmbeddedSignupV4Action(
     for (const page of pagesRes.data ?? []) {
       await admin.from("channels").upsert(
         {
-          workspace_id: member.workspace_id,
+          workspace_id: workspaceId,
           type: "facebook",
           external_id: page.id,
           display_name: page.name,
@@ -103,7 +99,7 @@ export async function completeEmbeddedSignupV4Action(
       if (page.instagram_business_account?.id) {
         await admin.from("channels").upsert(
           {
-            workspace_id: member.workspace_id,
+            workspace_id: workspaceId,
             type: "instagram",
             external_id: page.instagram_business_account.id,
             display_name: `${page.name} (IG)`,
