@@ -264,10 +264,10 @@ export async function connectFacebookPageManualAction(
   if (!member) return { error: "No tienes workspace" };
   if (!["owner", "admin"].includes(member.role)) return { error: "Sin permiso para conectar canales" };
 
-  // 1. Verify token + page via /{page-id}
+  // 1. Verify token + page via /{page-id}, and upgrade to Page Access Token
   const GRAPH = "https://graph.facebook.com/v22.0";
   const probe = await fetch(
-    `${GRAPH}/${parsed.data.page_id}?fields=id,name,instagram_business_account{id,username}&access_token=${encodeURIComponent(parsed.data.access_token)}`,
+    `${GRAPH}/${parsed.data.page_id}?fields=id,name,access_token,instagram_business_account{id,username}&access_token=${encodeURIComponent(parsed.data.access_token)}`,
     { cache: "no-store" },
   );
   if (!probe.ok) {
@@ -277,12 +277,16 @@ export async function connectFacebookPageManualAction(
   const page = z.object({
     id: z.string(),
     name: z.string().optional(),
+    access_token: z.string().min(1).optional(),
     instagram_business_account: z.object({ id: z.string(), username: z.string().optional() }).optional(),
   }).parse(await probe.json());
+  // Page Access Token is what we need for `conversations`, `subscribed_apps`, `messages`, etc.
+  // If Meta didn't return it (rare with User Token), fall back to the input token.
+  const pageToken = page.access_token ?? parsed.data.access_token;
 
-  // 2. Save FB page
-  const encToken = encrypt(parsed.data.access_token);
-  const fbMeta: Record<string, unknown> = {};
+// 2. Save FB page
+  const encToken = encrypt(pageToken);
+  const fbMeta: Record<string, unknown> = { page_id: page.id };
   const { error: fbSaveErr } = await admin
     .from("channels")
     .upsert({
