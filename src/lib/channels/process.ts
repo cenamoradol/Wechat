@@ -190,26 +190,14 @@ export async function processOutboundStatuses(
       updates.status = "failed";
     }
     if (Object.keys(updates).length === 0) continue;
-    const { data: updated, error } = await admin
+    const { error } = await admin
       .from("messages")
       .update(updates)
       .eq("external_id", s.id)
       .eq("direction", "out")
-      .select("id, read_at, status");
-    // Log every status update attempt so we can diagnose
-    await admin.from("webhook_events").insert({
-      type: `debug:outbound-status:${channelType}:${s.status}`,
-      payload: {
-        external_id: s.id,
-        attempted: updates,
-        matched: updated?.length ?? 0,
-        err: error?.message ?? null,
-      },
-      processed: !error && (updated?.length ?? 0) > 0,
-      error: error?.message ?? null,
-    });
+      .select("id");
     if (error) {
-      console.error("outbound status update failed", { error: error.message, s });
+      console.error("outbound status update failed", { error: error.message, external_id: s.id });
     }
   }
 }
