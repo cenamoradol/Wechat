@@ -196,22 +196,20 @@ export async function processOutboundStatuses(
       .eq("external_id", s.id)
       .eq("direction", "out")
       .select("id, read_at, status");
+    // Log every status update attempt so we can diagnose
+    await admin.from("webhook_events").insert({
+      type: `debug:outbound-status:${channelType}:${s.status}`,
+      payload: {
+        external_id: s.id,
+        attempted: updates,
+        matched: updated?.length ?? 0,
+        err: error?.message ?? null,
+      },
+      processed: !error && (updated?.length ?? 0) > 0,
+      error: error?.message ?? null,
+    });
     if (error) {
       console.error("outbound status update failed", { error: error.message, s });
-      await admin.from("webhook_events").insert({
-        type: `error:outbound-status:${channelType}`,
-        payload: { err: error.message, status_update: updates, target_external_id: s.id },
-        processed: false,
-        error: error.message,
-      });
-    } else if (!updated || updated.length === 0) {
-      // No matching message — log so we know why read_at didn't get set
-      await admin.from("webhook_events").insert({
-        type: `warn:outbound-status-no-match:${channelType}`,
-        payload: { status_update: updates, target_external_id: s.id, status_kind: s.status },
-        processed: false,
-        error: `No message with external_id=${s.id} and direction=out`,
-      });
     }
   }
 }
