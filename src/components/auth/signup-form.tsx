@@ -30,7 +30,7 @@ const Schema = z
 
 type FormValues = z.infer<typeof Schema>;
 
-export function SignupForm() {
+export function SignupForm({ next }: { next?: string } = {}) {
   const [isPending, startTransition] = useTransition();
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const {
@@ -50,6 +50,7 @@ export function SignupForm() {
           full_name: values.full_name,
           email: values.email,
           password: values.password,
+          ...(next ? { next } : {}),
         });
         if (res?.error) toast.error(res.error);
         if (res?.success) {

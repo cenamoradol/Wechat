@@ -16,6 +16,7 @@ const SignupSchema = z.object({
   full_name: z.string().min(2).max(100),
   email: z.string().email(),
   password: z.string().min(8).regex(/[A-Z]/, "Debe tener al menos una mayúscula").regex(/[0-9]/, "Debe tener al menos un número"),
+  next: z.string().optional(),
 });
 
 const ForgotSchema = z.object({
@@ -68,8 +69,10 @@ export async function signupAction(input: z.infer<typeof SignupSchema>): Promise
     };
   }
 
-  // No email confirmation: session exists, redirect to create workspace
-  redirect("/onboarding");
+  // No email confirmation: session exists. Honor `next` (e.g., coming from invite link)
+  // — fall back to onboarding for fresh accounts.
+  const safeNext = parsed.data.next?.startsWith("/") ? parsed.data.next : "/onboarding";
+  redirect(safeNext);
 }
 
 export async function forgotPasswordAction(input: z.infer<typeof ForgotSchema>): Promise<ActionResult> {

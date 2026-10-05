@@ -14,6 +14,7 @@ export default async function LoginPage({
   searchParams: Promise<{ next?: string }>;
 }) {
   const { next } = await searchParams;
+  const nextParam = next ? `?next=${encodeURIComponent(next)}` : "";
   return (
     <Card className="w-full max-w-md">
       <CardHeader>
@@ -24,7 +25,7 @@ export default async function LoginPage({
         <LoginForm next={next} />
         <p className="mt-4 text-center text-sm text-muted-foreground">
           ¿No tienes cuenta?{" "}
-          <Link href="/signup" className="font-medium text-foreground underline">
+          <Link href={`/signup${nextParam}`} className="font-medium text-foreground underline">
             Regístrate
           </Link>
         </p>
