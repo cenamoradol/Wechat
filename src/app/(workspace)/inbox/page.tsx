@@ -9,6 +9,7 @@ import Link from "next/link";
 import { MessageSquare, Hash, AtSign, Mail } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ReplyBox } from "@/components/inbox/reply-box";
+import { MessagesList } from "@/components/inbox/messages-list";
 
 type Conversation = {
   id: string;
@@ -74,9 +75,9 @@ export default async function InboxPage({
   const activeIdToUse = activeConv?.id;
 
   return (
-    <div className="flex h-full">
+    <div className="flex h-full min-h-0">
       {/* Left column: conversation list */}
-      <aside className="hidden w-80 shrink-0 border-r md:flex md:flex-col">
+      <aside className="hidden w-80 shrink-0 border-r md:flex md:flex-col min-h-0">
         <div className="border-b p-3">
           <h2 className="text-sm font-semibold">Inbox</h2>
           <p className="text-xs text-muted-foreground">
@@ -153,7 +154,7 @@ export default async function InboxPage({
       </aside>
 
       {/* Center column: active thread */}
-      <main className="flex min-w-0 flex-1 flex-col">
+      <main className="flex min-w-0 flex-1 flex-col min-h-0">
         {activeConv ? (
           <ActiveThread conversationId={activeConv.id} />
         ) : (
@@ -188,16 +189,7 @@ async function ActiveThread({ conversationId }: { conversationId: string }) {
     .order("created_at", { ascending: true })
     .limit(200);
 
-  // Diagnostic strip — always visible during debugging
-  const debug = {
-    convId: conversationId,
-    convFound: !!conv,
-    convErr: convErr?.message ?? null,
-    msgCount: messages?.length ?? 0,
-    msgErr: msgErr?.message ?? null,
-    firstMsg: messages?.[0]?.text?.slice(0, 50) ?? null,
-    lastMsg: messages?.[messages.length - 1]?.text?.slice(0, 50) ?? null,
-  };
+  if (msgErr) console.error("messages query failed", msgErr);
 
   const contact = (conv as any)?.contact_channels?.contacts;
   const channel = (conv as any)?.contact_channels?.channels;
@@ -225,72 +217,8 @@ async function ActiveThread({ conversationId }: { conversationId: string }) {
         </div>
         <Badge variant="outline">{channel?.display_name ?? channelType}</Badge>
       </header>
-      {debug && (
-        <div className="border-b bg-yellow-50 px-4 py-2 text-xs text-yellow-900">
-          <strong>Debug:</strong> {JSON.stringify(debug)} · conv_id={conversationId} · messages count={messages?.length ?? 0}
-        </div>
-      )}
-      <div className="flex-1 overflow-y-auto p-4 space-y-2 bg-muted/20">
-        {(messages ?? []).length === 0 ? (
-          <div className="text-center text-sm text-muted-foreground">
-            No hay mensajes aún.
-          </div>
-        ) : (
-          (messages ?? []).map((m: any) => (
-            <MessageBubble key={m.id} message={m} />
-          ))
-        )}
-      </div>
+      <MessagesList messages={(messages ?? []) as any} />
       <ReplyBox conversationId={conversationId} />
     </>
   );
-}
-
-function MessageBubble({ message }: { message: any }) {
-  const isOut = message.direction === "out";
-  return (
-    <div className={`flex ${isOut ? "justify-end" : "justify-start"}`}>
-      <div
-        className={cn(
-          "max-w-[70%] rounded-2xl px-3 py-2 text-sm shadow-sm",
-          isOut
-            ? "rounded-br-sm bg-primary text-primary-foreground"
-            : "rounded-bl-sm bg-background",
-        )}
-      >
-        <p className="whitespace-pre-wrap break-words">
-          {message.text ?? <em className="opacity-60">[{message.type}]</em>}
-        </p>
-        <div
-          className={cn(
-            "mt-1 flex items-center justify-end gap-1 text-[10px]",
-            isOut ? "text-primary-foreground/70" : "text-muted-foreground",
-          )}
-        >
-          <time>
-            {new Date(message.created_at).toLocaleTimeString("es", {
-              hour: "2-digit",
-              minute: "2-digit",
-            })}
-          </time>
-          {isOut && <span>{statusIcon(message.status)}</span>}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function statusIcon(status: string | null) {
-  switch (status) {
-    case "sent":
-      return "✓";
-    case "delivered":
-      return "✓✓";
-    case "read":
-      return "✓✓";
-    case "failed":
-      return "✕";
-    default:
-      return "";
-  }
 }
