@@ -50,7 +50,10 @@ async function pollOneChannel(ch: Channel): Promise<{ processed: number; errors:
   let processed = 0;
 
   for (const conv of conversations) {
-    const messages = conv.messages?.data ?? [];
+    // Graph returns newest-first; sort ascending so conversation.last_message_at ends up correct.
+    const messages = (conv.messages?.data ?? [])
+      .slice()
+      .sort((a, b) => new Date(a.created_time).getTime() - new Date(b.created_time).getTime());
     for (const msg of messages) {
       // Skip our own outgoing messages (from.page_id == pageId)
       if (!msg.from?.id || msg.from.id === pageId) continue;

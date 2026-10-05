@@ -90,20 +90,33 @@ export async function processInbound(m: NormalizedMessage): Promise<void> {
     return;
   }
 
-  // 4. Upsert conversation
+  // 4. Upsert conversation (only bump last_message_at if the new message is newer)
   const preview = (m.text ?? `[${m.type}]`).slice(0, 200);
+  const { data: existing } = await admin
+    .from("conversations")
+    .select("last_message_at")
+    .eq("contact_channel_id", cc.id)
+    .maybeSingle();
+  const newerThanLast = !existing?.last_message_at ||
+    m.timestamp.getTime() > new Date(existing.last_message_at).getTime();
+  const convFields: {
+    workspace_id: string;
+    contact_channel_id: string;
+    status: "open";
+    last_message_at?: string;
+    last_message_preview?: string;
+  } = {
+    workspace_id: channel.workspace_id,
+    contact_channel_id: cc.id,
+    status: "open",
+  };
+  if (newerThanLast) {
+    convFields.last_message_at = m.timestamp.toISOString();
+    convFields.last_message_preview = preview;
+  }
   const { data: conv, error: convErr } = await admin
     .from("conversations")
-    .upsert(
-      {
-        workspace_id: channel.workspace_id,
-        contact_channel_id: cc.id,
-        last_message_at: m.timestamp.toISOString(),
-        last_message_preview: preview,
-        status: "open",
-      },
-      { onConflict: "contact_channel_id" },
-    )
+    .upsert(convFields, { onConflict: "contact_channel_id" })
     .select("id")
     .single();
   if (convErr || !conv) {
@@ -111,8 +124,8 @@ export async function processInbound(m: NormalizedMessage): Promise<void> {
     return;
   }
 
-  // 5. Insert message (idempotent on external_id when present)
-  const { error: msgErr } = await admin.from("messages").insert({
+  // 5. Upsert message (idempotent on (conversation_id, external_id))
+  const { error: msgErr } = await admin.from("messages").upsert({
     conversation_id: conv.id,
     external_id: m.messageExternalId,
     direction: "in",
@@ -122,13 +135,8 @@ export async function processInbound(m: NormalizedMessage): Promise<void> {
     media_mime: m.mediaMime ?? null,
     raw_payload: m.raw as unknown as Record<string, unknown>,
     status: "delivered",
-  });
-  if (msgErr) {
-    // Unique violation = duplicate, ignore
-    if (!String(msgErr.message).toLowerCase().includes("duplicate")) {
-      console.error("message insert failed", msgErr);
-    }
-  }
+  }, { onConflict: "conversation_id,external_id" });
+  if (msgErr) console.error("message upsert failed", msgErr);
 }
 
 export async function logWebhookEvent(args: {
