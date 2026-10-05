@@ -171,7 +171,7 @@ async function ActiveThread({ conversationId }: { conversationId: string }) {
   const adminSupabase = (await import("@/lib/supabase/admin")).createAdminClient();
 
   // Get conversation detail with contact info
-  const { data: conv } = await adminSupabase
+  const { data: conv, error: convErr } = await adminSupabase
     .from("conversations")
     .select(
       "id, contact_channels(id, external_user_id, contacts(id, full_name, phone_e164, email), channels(id, type, display_name))",
@@ -179,12 +179,17 @@ async function ActiveThread({ conversationId }: { conversationId: string }) {
     .eq("id", conversationId)
     .single();
 
-  const { data: messages } = await adminSupabase
+  const { data: messages, error: msgErr } = await adminSupabase
     .from("messages")
     .select("id, direction, type, text, status, created_at, sent_by")
     .eq("conversation_id", conversationId)
     .order("created_at", { ascending: true })
     .limit(200);
+
+  // Diagnostic strip — visible only when there's an error or zero messages with valid conv
+  const debug = (convErr || msgErr)
+    ? { convErr: convErr?.message, msgErr: msgErr?.message }
+    : null;
 
   const contact = (conv as any)?.contact_channels?.contacts;
   const channel = (conv as any)?.contact_channels?.channels;
@@ -212,6 +217,11 @@ async function ActiveThread({ conversationId }: { conversationId: string }) {
         </div>
         <Badge variant="outline">{channel?.display_name ?? channelType}</Badge>
       </header>
+      {debug && (
+        <div className="border-b bg-yellow-50 px-4 py-2 text-xs text-yellow-900">
+          <strong>Debug:</strong> {JSON.stringify(debug)} · conv_id={conversationId} · messages count={messages?.length ?? 0}
+        </div>
+      )}
       <div className="flex-1 overflow-y-auto p-4 space-y-2 bg-muted/20">
         {(messages ?? []).length === 0 ? (
           <div className="text-center text-sm text-muted-foreground">
