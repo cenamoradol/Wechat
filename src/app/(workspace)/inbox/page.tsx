@@ -10,6 +10,7 @@ import { MessageSquare, Hash, AtSign, Mail } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ReplyBox } from "@/components/inbox/reply-box";
 import { MessagesList } from "@/components/inbox/messages-list";
+import { InboxRealtimeSync } from "@/components/inbox/inbox-realtime-sync";
 
 type Conversation = {
   id: string;
@@ -76,6 +77,9 @@ export default async function InboxPage({
 
   return (
     <div className="flex h-full min-h-0">
+      {/* Realtime: refresh on new messages or conversation updates */}
+      <InboxRealtimeSync conversationId={activeConv?.id} />
+
       {/* Left column: conversation list */}
       <aside className="hidden w-80 shrink-0 border-r md:flex md:flex-col min-h-0">
         <div className="border-b p-3">
