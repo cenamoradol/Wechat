@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { unstable_noStore } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -40,6 +41,7 @@ export default async function InboxPage({
 }: {
   searchParams: Promise<{ conversation?: string }>;
 }) {
+  unstable_noStore();
   const { conversation: activeId } = await searchParams;
   const supabase = await createClient();
   const {
@@ -186,10 +188,16 @@ async function ActiveThread({ conversationId }: { conversationId: string }) {
     .order("created_at", { ascending: true })
     .limit(200);
 
-  // Diagnostic strip — visible only when there's an error or zero messages with valid conv
-  const debug = (convErr || msgErr)
-    ? { convErr: convErr?.message, msgErr: msgErr?.message }
-    : null;
+  // Diagnostic strip — always visible during debugging
+  const debug = {
+    convId: conversationId,
+    convFound: !!conv,
+    convErr: convErr?.message ?? null,
+    msgCount: messages?.length ?? 0,
+    msgErr: msgErr?.message ?? null,
+    firstMsg: messages?.[0]?.text?.slice(0, 50) ?? null,
+    lastMsg: messages?.[messages.length - 1]?.text?.slice(0, 50) ?? null,
+  };
 
   const contact = (conv as any)?.contact_channels?.contacts;
   const channel = (conv as any)?.contact_channels?.channels;
