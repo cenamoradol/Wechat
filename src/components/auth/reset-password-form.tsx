@@ -28,7 +28,7 @@ const Schema = z
 
 type FormValues = z.infer<typeof Schema>;
 
-export function ResetPasswordForm() {
+export function ResetPasswordForm({ onSuccess }: { onSuccess?: () => void } = {}) {
   const [isPending, startTransition] = useTransition();
   const {
     register,
@@ -50,7 +50,8 @@ export function ResetPasswordForm() {
           toast.error(res.error);
           return;
         }
-        // The action does a redirect on success.
+        // Server action redirects on success. If onSuccess is provided, call it.
+        onSuccess?.();
       } catch (e) {
         if (e instanceof Error && e.message.includes("NEXT_REDIRECT")) throw e;
         toast.error("Error inesperado al cambiar la contraseña");
