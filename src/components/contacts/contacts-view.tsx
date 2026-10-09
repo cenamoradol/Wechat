@@ -1,9 +1,20 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useMemo } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
-import { Plus, Upload, Search, X, MessageCircle, Mail, Phone, Filter } from "lucide-react";
+import { useRouter } from "next/navigation";
+import {
+  Plus,
+  Upload,
+  Search,
+  X,
+  MessageCircle,
+  Mail,
+  Phone,
+  Filter,
+  Download,
+  Tag,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,11 +27,12 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { createContactAction, importContactsAction } from "@/app/(workspace)/contacts/actions";
+import {
+  importContactsAction,
+  bulkTagContactsAction,
+} from "@/app/(workspace)/contacts/actions";
 import { NewContactDialog } from "./new-contact-dialog";
 
 type Contact = {
@@ -35,6 +47,7 @@ type Contact = {
 };
 
 type Channel = { id: string; type: string; display_name: string };
+type Workspace = { id: string; name: string; slug: string; role: string };
 
 const CHANNEL_LABELS: Record<string, { label: string; color: string }> = {
   whatsapp: { label: "WhatsApp", color: "bg-green-100 text-green-800" },
@@ -47,21 +60,46 @@ export function ContactsView({
   channels,
   allTags,
   currentFilters,
+  workspaces,
+  activeWorkspaceId,
+  targetWorkspaceId,
 }: {
   contacts: Contact[];
   channels: Channel[];
   allTags: string[];
   currentFilters: { q: string; tag: string; channel: string };
+  workspaces: Workspace[];
+  activeWorkspaceId: string;
+  targetWorkspaceId: string;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [search, setSearch] = useState(currentFilters.q);
   const [showNew, setShowNew] = useState(false);
   const [showImport, setShowImport] = useState(false);
+  const [showBulkTag, setShowBulkTag] = useState(false);
 
-  const onSearch = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    applyFilters({ q: search.trim() });
+  // Bulk selection
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const allChecked = useMemo(
+    () => contacts.length > 0 && contacts.every((c) => selected.has(c.id)),
+    [contacts, selected],
+  );
+  const someChecked = useMemo(
+    () => contacts.some((c) => selected.has(c.id)),
+    [contacts, selected],
+  );
+  const toggleAll = () => {
+    if (allChecked) setSelected(new Set());
+    else setSelected(new Set(contacts.map((c) => c.id)));
+  };
+  const toggleOne = (id: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   };
 
   const applyFilters = (overrides: Partial<typeof currentFilters>) => {
@@ -70,7 +108,53 @@ export function ContactsView({
     if (next.q) params.set("q", next.q);
     if (next.tag) params.set("tag", next.tag);
     if (next.channel) params.set("channel", next.channel);
+    if (targetWorkspaceId !== activeWorkspaceId) {
+      params.set("workspace", targetWorkspaceId);
+    }
     router.push(`/contacts${params.toString() ? "?" + params.toString() : ""}`);
+  };
+
+  const onSearch = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    applyFilters({ q: search.trim() });
+  };
+
+  const switchWorkspace = (id: string) => {
+    const params = new URLSearchParams();
+    params.set("workspace", id);
+    if (currentFilters.q) params.set("q", currentFilters.q);
+    if (currentFilters.tag) params.set("tag", currentFilters.tag);
+    if (currentFilters.channel) params.set("channel", currentFilters.channel);
+    router.push(`/contacts?${params.toString()}`);
+  };
+
+  const exportCSV = () => {
+    const rows = selected.size > 0 ? contacts.filter((c) => selected.has(c.id)) : contacts;
+    if (rows.length === 0) {
+      toast.error("No hay contactos para exportar");
+      return;
+    }
+    const header = ["full_name", "email", "phone_e164", "tags", "notes", "last_activity"];
+    const lines = [header.join(",")];
+    for (const c of rows) {
+      const row = [
+        c.full_name ?? "",
+        c.email ?? "",
+        c.phone_e164 ?? "",
+        c.tags.join(";"),
+        c.notes ?? "",
+        new Date(c.lastActivity).toISOString(),
+      ].map((v) => `"${String(v).replaceAll('"', '""')}"`);
+      lines.push(row.join(","));
+    }
+    const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `contactos-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success(`${rows.length} contactos exportados`);
   };
 
   return (
@@ -80,20 +164,69 @@ export function ContactsView({
         <div>
           <h1 className="text-2xl font-semibold">Contactos</h1>
           <p className="text-sm text-muted-foreground">
-            {contacts.length} {contacts.length === 1 ? "contacto" : "contactos"} en este workspace
+            {contacts.length} {contacts.length === 1 ? "contacto" : "contactos"}
+            {targetWorkspaceId !== activeWorkspaceId && (
+              <span className="ml-1 italic">(en otro workspace — no es el activo)</span>
+            )}
           </p>
         </div>
         <div className="flex gap-2">
+          {selected.size > 0 ? (
+            <>
+              <Button variant="outline" onClick={() => setShowBulkTag(true)}>
+                <Tag className="mr-2 h-4 w-4" />
+                Tags ({selected.size})
+              </Button>
+              <Button onClick={exportCSV}>
+                <Download className="mr-2 h-4 w-4" />
+                Exportar selección
+              </Button>
+            </>
+          ) : (
+            <Button
+              variant="outline"
+              onClick={exportCSV}
+              disabled={contacts.length === 0}
+            >
+              <Download className="mr-2 h-4 w-4" />
+              Exportar
+            </Button>
+          )}
           <Button variant="outline" onClick={() => setShowImport(true)}>
             <Upload className="mr-2 h-4 w-4" />
-            Importar CSV
+            Importar
           </Button>
           <Button onClick={() => setShowNew(true)}>
             <Plus className="mr-2 h-4 w-4" />
-            Nuevo contacto
+            Nuevo
           </Button>
         </div>
       </div>
+
+      {/* Workspace switcher (chip) — only if more than 1 */}
+      {workspaces.length > 1 && (
+        <div className="flex flex-wrap items-center gap-1">
+          <span className="text-xs text-muted-foreground">Workspace:</span>
+          {workspaces.map((w) => {
+            const active = w.id === targetWorkspaceId;
+            const isMain = w.id === activeWorkspaceId;
+            return (
+              <button
+                key={w.id}
+                onClick={() => switchWorkspace(w.id)}
+                className={`rounded-full border px-2.5 py-0.5 text-xs ${
+                  active
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:bg-muted"
+                }`}
+              >
+                {w.name}
+                {isMain && <span className="ml-1 opacity-70">·activo</span>}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-2">
@@ -179,12 +312,12 @@ export function ContactsView({
               <p className="font-medium">
                 {currentFilters.q || currentFilters.tag || currentFilters.channel
                   ? "Sin resultados con esos filtros"
-                  : "Sin contactos aún"}
+                  : "Sin contactos aún en este workspace"}
               </p>
               <p className="mt-1 text-sm text-muted-foreground">
                 {currentFilters.q || currentFilters.tag || currentFilters.channel
-                  ? "Prueba limpiar los filtros."
-                  : "Los contactos se crean automáticamente al recibir mensajes, o puedes crearlos manualmente."}
+                  ? "Prueba limpiar los filtros o cambiar de workspace arriba."
+                  : "Los contactos se crean automáticamente al recibir mensajes."}
               </p>
             </div>
           </CardContent>
@@ -195,6 +328,17 @@ export function ContactsView({
             <table className="w-full text-sm">
               <thead className="border-b bg-muted/40 text-left text-xs uppercase text-muted-foreground">
                 <tr>
+                  <th className="w-10 px-2 py-2.5">
+                    <input
+                      type="checkbox"
+                      checked={allChecked}
+                      ref={(el) => {
+                        if (el) el.indeterminate = !allChecked && someChecked;
+                      }}
+                      onChange={toggleAll}
+                      aria-label="Seleccionar todos"
+                    />
+                  </th>
                   <th className="px-4 py-2.5">Nombre</th>
                   <th className="px-4 py-2.5">Contacto</th>
                   <th className="px-4 py-2.5">Canales</th>
@@ -203,71 +347,85 @@ export function ContactsView({
                 </tr>
               </thead>
               <tbody className="divide-y">
-                {contacts.map((c) => (
-                  <tr key={c.id} className="hover:bg-muted/30">
-                    <td className="px-4 py-3 font-medium">
-                      <Link
-                        href={`/contacts/${c.id}`}
-                        className="block text-foreground hover:underline"
-                      >
-                        {c.full_name ?? <span className="text-muted-foreground">—</span>}
-                      </Link>
-                    </td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground">
-                      {c.email && (
-                        <div className="flex items-center gap-1">
-                          <Mail className="h-3 w-3" />
-                          {c.email}
-                        </div>
-                      )}
-                      {c.phone_e164 && (
-                        <div className="flex items-center gap-1">
-                          <Phone className="h-3 w-3" />
-                          {c.phone_e164}
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex flex-wrap gap-1">
-                        {c.channels.length === 0 ? (
-                          <span className="text-xs text-muted-foreground">—</span>
-                        ) : (
-                          c.channels.map((ch, i) => (
-                            <span
-                              key={i}
-                              className={`rounded px-1.5 py-0.5 text-[10px] ${
-                                CHANNEL_LABELS[ch.type]?.color ?? "bg-muted"
-                              }`}
-                            >
-                              {CHANNEL_LABELS[ch.type]?.label ?? ch.type}
-                            </span>
-                          ))
+                {contacts.map((c) => {
+                  const isSelected = selected.has(c.id);
+                  return (
+                    <tr
+                      key={c.id}
+                      className={`hover:bg-muted/30 ${isSelected ? "bg-blue-50/50" : ""}`}
+                    >
+                      <td className="w-10 px-2 py-3 text-center">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => toggleOne(c.id)}
+                          aria-label={`Seleccionar ${c.full_name ?? c.email ?? c.phone_e164 ?? c.id}`}
+                        />
+                      </td>
+                      <td className="px-4 py-3 font-medium">
+                        <Link
+                          href={`/contacts/${c.id}`}
+                          className="block text-foreground hover:underline"
+                        >
+                          {c.full_name ?? <span className="text-muted-foreground">—</span>}
+                        </Link>
+                      </td>
+                      <td className="px-4 py-3 text-xs text-muted-foreground">
+                        {c.email && (
+                          <div className="flex items-center gap-1">
+                            <Mail className="h-3 w-3" />
+                            {c.email}
+                          </div>
                         )}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex flex-wrap gap-1">
-                        {c.tags.length === 0 ? (
-                          <span className="text-xs text-muted-foreground">—</span>
-                        ) : (
-                          c.tags.map((t) => (
-                            <Badge key={t} variant="secondary" className="text-[10px]">
-                              #{t}
-                            </Badge>
-                          ))
+                        {c.phone_e164 && (
+                          <div className="flex items-center gap-1">
+                            <Phone className="h-3 w-3" />
+                            {c.phone_e164}
+                          </div>
                         )}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground">
-                      {new Date(c.lastActivity).toLocaleString("es", {
-                        day: "2-digit",
-                        month: "short",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-wrap gap-1">
+                          {c.channels.length === 0 ? (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          ) : (
+                            c.channels.map((ch, i) => (
+                              <span
+                                key={i}
+                                className={`rounded px-1.5 py-0.5 text-[10px] ${
+                                  CHANNEL_LABELS[ch.type]?.color ?? "bg-muted"
+                                }`}
+                              >
+                                {CHANNEL_LABELS[ch.type]?.label ?? ch.type}
+                              </span>
+                            ))
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-wrap gap-1">
+                          {c.tags.length === 0 ? (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          ) : (
+                            c.tags.map((t) => (
+                              <Badge key={t} variant="secondary" className="text-[10px]">
+                                #{t}
+                              </Badge>
+                            ))
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-xs text-muted-foreground">
+                        {new Date(c.lastActivity).toLocaleString("es", {
+                          day: "2-digit",
+                          month: "short",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -277,6 +435,17 @@ export function ContactsView({
       {/* Modals */}
       <NewContactDialog open={showNew} onOpenChange={setShowNew} />
       <ImportCSVDialog open={showImport} onOpenChange={setShowImport} />
+      <BulkTagDialog
+        open={showBulkTag}
+        onOpenChange={setShowBulkTag}
+        selectedIds={Array.from(selected)}
+        existingTags={allTags}
+        onDone={() => {
+          setSelected(new Set());
+          setShowBulkTag(false);
+          router.refresh();
+        }}
+      />
     </div>
   );
 }
@@ -351,6 +520,94 @@ function ImportCSVDialog({ open, onOpenChange }: { open: boolean; onOpenChange: 
           </Button>
           <Button onClick={onImport} disabled={isPending || !csvText.trim()}>
             {isPending ? "Importando…" : "Importar"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function BulkTagDialog({
+  open,
+  onOpenChange,
+  selectedIds,
+  existingTags,
+  onDone,
+}: {
+  open: boolean;
+  onOpenChange: (b: boolean) => void;
+  selectedIds: string[];
+  existingTags: string[];
+  onDone: () => void;
+}) {
+  const [tagsToAdd, setTagsToAdd] = useState("");
+  const [tagsToRemove, setTagsToRemove] = useState("");
+  const [isPending, startTransition] = useTransition();
+
+  const onApply = () => {
+    if (!tagsToAdd.trim() && !tagsToRemove.trim()) {
+      toast.error("Escribe al menos un tag para agregar o quitar");
+      return;
+    }
+    startTransition(async () => {
+      const res = await bulkTagContactsAction({
+        contactIds: selectedIds,
+        tagsToAdd: tagsToAdd
+          .split(",")
+          .map((t) => t.trim().toLowerCase())
+          .filter(Boolean),
+        tagsToRemove: tagsToRemove
+          .split(",")
+          .map((t) => t.trim().toLowerCase())
+          .filter(Boolean),
+      });
+      if (res.error) {
+        toast.error(res.error);
+        return;
+      }
+      toast.success(`${res.updated} contactos actualizados`);
+      setTagsToAdd("");
+      setTagsToRemove("");
+      onDone();
+    });
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Tags en masa ({selectedIds.length} contactos)</DialogTitle>
+          <DialogDescription>
+            Tags existentes:{" "}
+            {existingTags.length > 0 ? existingTags.map((t) => `#${t}`).join(", ") : "(ninguno)"}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="tagsAdd">Agregar tags (separados por coma)</Label>
+            <Input
+              id="tagsAdd"
+              value={tagsToAdd}
+              onChange={(e) => setTagsToAdd(e.target.value)}
+              placeholder="vip, hot, cliente-recurrente…"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="tagsRemove">Quitar tags (separados por coma)</Label>
+            <Input
+              id="tagsRemove"
+              value={tagsToRemove}
+              onChange={(e) => setTagsToRemove(e.target.value)}
+              placeholder="spam, inactivo…"
+            />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={() => onOpenChange(false)}>
+            Cancelar
+          </Button>
+          <Button onClick={onApply} disabled={isPending}>
+            {isPending ? "Aplicando…" : "Aplicar"}
           </Button>
         </DialogFooter>
       </DialogContent>
