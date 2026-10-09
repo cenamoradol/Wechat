@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useTransition, useMemo } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Plus,
@@ -352,9 +351,20 @@ export function ContactsView({
                   return (
                     <tr
                       key={c.id}
-                      className={`hover:bg-muted/30 ${isSelected ? "bg-blue-50/50" : ""}`}
+                      onClick={() => router.push(`/contacts/${c.id}`)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          router.push(`/contacts/${c.id}`);
+                        }
+                      }}
+                      tabIndex={0}
+                      className={`cursor-pointer transition-colors hover:bg-muted/50 focus:bg-muted/50 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:ring-inset ${isSelected ? "bg-blue-50/50" : ""}`}
                     >
-                      <td className="w-10 px-2 py-3 text-center">
+                      <td
+                        className="w-10 px-2 py-3 text-center"
+                        onClick={(e) => e.stopPropagation()}
+                      >
                         <input
                           type="checkbox"
                           checked={isSelected}
@@ -363,12 +373,7 @@ export function ContactsView({
                         />
                       </td>
                       <td className="px-4 py-3 font-medium">
-                        <Link
-                          href={`/contacts/${c.id}`}
-                          className="block text-foreground hover:underline"
-                        >
-                          {c.full_name ?? <span className="text-muted-foreground">—</span>}
-                        </Link>
+                        {c.full_name ?? <span className="text-muted-foreground">—</span>}
                       </td>
                       <td className="px-4 py-3 text-xs text-muted-foreground">
                         {c.email && (
