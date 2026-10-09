@@ -165,6 +165,8 @@ export type Database = {
           phone_e164: string | null;
           avatar_url: string | null;
           metadata: Record<string, unknown>;
+          tags: string[];
+          notes: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -175,6 +177,8 @@ export type Database = {
           phone_e164?: string | null;
           avatar_url?: string | null;
           metadata?: Record<string, unknown>;
+          tags?: string[];
+          notes?: string | null;
         };
         Update: Partial<{
           full_name: string | null;
@@ -182,8 +186,17 @@ export type Database = {
           phone_e164: string | null;
           avatar_url: string | null;
           metadata: Record<string, unknown>;
+          tags: string[];
+          notes: string | null;
         }>;
-        Relationships: [];
+        Relationships: [
+          {
+            foreignKeyName: "contact_channels_contact_id_fkey";
+            columns: ["id"];
+            referencedRelation: "contact_channels";
+            referencedColumns: ["contact_id"];
+          },
+        ];
       };
       contact_channels: {
         Row: {
@@ -206,7 +219,14 @@ export type Database = {
           profile: Record<string, unknown>;
           last_seen_at: string | null;
         }>;
-        Relationships: [];
+        Relationships: [
+          {
+            foreignKeyName: "contact_channels_channel_id_fkey";
+            columns: ["channel_id"];
+            referencedRelation: "channels";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       conversations: {
         Row: {

@@ -7,13 +7,14 @@ import {
   Inbox,
   Users,
   Settings,
-  MessagesSquare,
+  Contact,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const nav = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/inbox", label: "Inbox", icon: Inbox },
+  { href: "/contacts", label: "Contactos", icon: Contact },
   { href: "/team", label: "Equipo", icon: Users },
   { href: "/settings", label: "Configuración", icon: Settings },
 ];
