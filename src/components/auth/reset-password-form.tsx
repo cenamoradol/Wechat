@@ -41,20 +41,22 @@ export function ResetPasswordForm({ onSuccess }: { onSuccess?: () => void } = {}
 
   const onSubmit = (values: FormValues) => {
     startTransition(async () => {
-      const res = await updatePasswordAction({
-        password: values.password,
-        confirm_password: values.confirm_password,
-      });
-      if (!res) {
-        toast.error("Sin respuesta del servidor. Intenta de nuevo.");
-        return;
+      try {
+        const res = await updatePasswordAction({
+          password: values.password,
+          confirm_password: values.confirm_password,
+        });
+        if (!res || (res as any).error) {
+          toast.error((res as any)?.error ?? "Error desconocido");
+          return;
+        }
+        toast.success("Contraseña cambiada con éxito");
+        onSuccess?.();
+      } catch (e) {
+        // Final safety net so the page never crashes
+        console.error("Form unexpected error:", e);
+        toast.error("Error inesperado. Intenta de nuevo.");
       }
-      if (res.error) {
-        toast.error(res.error);
-        return;
-      }
-      toast.success("Contraseña cambiada con éxito");
-      onSuccess?.();
     });
   };
 

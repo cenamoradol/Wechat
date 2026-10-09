@@ -170,6 +170,9 @@ export async function updatePasswordAction(
 
     console.log("updatePasswordAction: success for user", user.id);
     await safeSignOut();
+    // Return success instead of redirecting — the form will navigate
+    // via onSuccess() so we never throw NEXT_REDIRECT to the client.
+    return { success: "Contraseña cambiada" };
   } catch (e) {
     // Catch anything unexpected so the form gets a normal return value
     // (and we don't leak the recovery session).
@@ -178,14 +181,5 @@ export async function updatePasswordAction(
     return {
       error: `Error inesperado: ${e instanceof Error ? e.message : String(e)}`,
     };
-  }
-
-  // If we got here, the update succeeded. Try to redirect.
-  try {
-    redirect("/login?reset=ok");
-  } catch (e) {
-    // redirect() always throws — this is the expected path in server actions.
-    // The framework catches NEXT_REDIRECT and handles it.
-    throw e;
   }
 }
