@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, X } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,7 +14,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { toast } from "sonner";
 import { createContactAction } from "@/app/(workspace)/contacts/actions";
 
 export function NewContactDialog({
@@ -51,6 +51,27 @@ export function NewContactDialog({
     if (t && !tags.includes(t) && t.length <= 40) {
       setTags([...tags, t]);
       setTagInput("");
+      toast.success(`Tag "${t}" agregado`);
+    }
+  };
+
+  const handleTagKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    // Add on Enter OR on comma (so users can paste "vip, hot, lead")
+    if (e.key === "Enter" || e.key === ",") {
+      e.preventDefault();
+      // If they typed "vip, hot", split by comma and add all
+      const parts = tagInput.split(",").map((p) => p.trim().toLowerCase()).filter(Boolean);
+      if (parts.length > 1) {
+        const newTags = [...tags];
+        for (const p of parts) {
+          if (!newTags.includes(p) && p.length <= 40) newTags.push(p);
+        }
+        setTags(newTags);
+        setTagInput("");
+        toast.success(`${newTags.length - tags.length} tag(s) agregados`);
+      } else {
+        addTag();
+      }
     }
   };
 
@@ -129,27 +150,34 @@ export function NewContactDialog({
               <Input
                 value={tagInput}
                 onChange={(e) => setTagInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    addTag();
-                  }
+                onKeyDown={handleTagKeyDown}
+                onBlur={() => {
+                  // Auto-add tag if user clicks away with text
+                  if (tagInput.trim()) addTag();
                 }}
-                placeholder="vip, hot, cliente-recurrente…"
+                placeholder="Escribe un tag y presiona Enter…"
               />
               <Button type="button" variant="outline" onClick={addTag}>
                 <Plus className="h-4 w-4" />
               </Button>
             </div>
+            <p className="text-xs text-muted-foreground">
+              También puedes pegar varios separados por coma: "vip, hot, cliente"
+            </p>
             {tags.length > 0 && (
-              <div className="flex flex-wrap gap-1">
+              <div className="flex flex-wrap gap-1.5 pt-1">
                 {tags.map((t) => (
                   <span
                     key={t}
-                    className="inline-flex items-center gap-1 rounded-md border bg-muted px-2 py-0.5 text-xs"
+                    className="inline-flex items-center gap-1 rounded-full border bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-900"
                   >
                     #{t}
-                    <button type="button" onClick={() => setTags(tags.filter((x) => x !== t))}>
+                    <button
+                      type="button"
+                      onClick={() => setTags(tags.filter((x) => x !== t))}
+                      className="ml-0.5 rounded-full p-0.5 hover:bg-blue-100"
+                      title={`Quitar ${t}`}
+                    >
                       <X className="h-3 w-3" />
                     </button>
                   </span>

@@ -69,6 +69,25 @@ export function ContactDetailView({
     if (t && !tags.includes(t) && t.length <= 40) {
       setTags([...tags, t]);
       setTagInput("");
+      toast.success(`Tag "${t}" agregado`);
+    }
+  };
+
+  const handleTagKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter" || e.key === ",") {
+      e.preventDefault();
+      const parts = tagInput.split(",").map((p) => p.trim().toLowerCase()).filter(Boolean);
+      if (parts.length > 1) {
+        const newTags = [...tags];
+        for (const p of parts) {
+          if (!newTags.includes(p) && p.length <= 40) newTags.push(p);
+        }
+        setTags(newTags);
+        setTagInput("");
+        toast.success(`${newTags.length - tags.length} tag(s) agregados`);
+      } else {
+        addTag();
+      }
     }
   };
 
@@ -210,29 +229,32 @@ export function ContactDetailView({
                   <Input
                     value={tagInput}
                     onChange={(e) => setTagInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        addTag();
-                      }
+                    onKeyDown={handleTagKeyDown}
+                    onBlur={() => {
+                      if (tagInput.trim()) addTag();
                     }}
-                    placeholder="vip, hot, cliente-recurrente…"
+                    placeholder="Escribe un tag y presiona Enter…"
                   />
                   <Button type="button" variant="outline" onClick={addTag}>
                     <Plus className="h-4 w-4" />
                   </Button>
                 </div>
+                <p className="text-xs text-muted-foreground">
+                  Pega varios separados por coma: "vip, hot, cliente"
+                </p>
                 {tags.length > 0 && (
                   <div className="flex flex-wrap gap-1">
                     {tags.map((t) => (
                       <span
                         key={t}
-                        className="inline-flex items-center gap-1 rounded-md border bg-muted px-2 py-0.5 text-xs"
+                        className="inline-flex items-center gap-1 rounded-full border bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-900"
                       >
                         #{t}
                         <button
                           type="button"
                           onClick={() => setTags(tags.filter((x) => x !== t))}
+                          className="ml-0.5 rounded-full p-0.5 hover:bg-blue-100"
+                          title={`Quitar ${t}`}
                         >
                           <X className="h-3 w-3" />
                         </button>
