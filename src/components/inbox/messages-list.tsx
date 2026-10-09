@@ -14,6 +14,9 @@ type Message = {
   created_at: string;
   external_id?: string | null;
   read_at?: string | null;
+  sent_by?: string | null;
+  // Profile of the agent who sent the message (only present for outbound)
+  profiles?: { full_name: string | null; email: string | null } | null;
 };
 
 function OutStatus({ status, isRead }: { status: string | null | undefined; isRead: boolean }) {
@@ -23,37 +26,61 @@ function OutStatus({ status, isRead }: { status: string | null | undefined; isRe
   return <span>✓</span>;
 }
 
+function getSenderLabel(m: Message): string | null {
+  if (m.direction !== "out") return null;
+  if (m.profiles?.full_name) return m.profiles.full_name;
+  if (m.profiles?.email) return m.profiles.email.split("@")[0];
+  return null;
+}
+
 function MessageBubble({ message }: { message: Message }) {
   const isOut = message.direction === "out";
   const isRead = isOut && !!message.read_at;
   const isUnread = !isOut && !message.read_at;
+  const senderLabel = getSenderLabel(message);
+  const senderInitial = senderLabel?.trim().charAt(0).toUpperCase();
   return (
-    <div className={`flex ${isOut ? "justify-end" : "justify-start"}`}>
-      <div
-        className={cn(
-          "max-w-[70%] rounded-2xl px-3 py-2 text-sm shadow-sm transition-colors",
-          isOut
-            ? "rounded-br-sm bg-primary text-primary-foreground"
-            : "rounded-bl-sm bg-background",
-          isUnread && "ring-2 ring-blue-400/70 font-medium",
+    <div className={`flex gap-2 ${isOut ? "justify-end" : "justify-start"}`}>
+      {!isOut && (
+        <div className="flex h-7 w-7 shrink-0 items-center justify-center self-end rounded-full bg-muted text-xs font-medium text-muted-foreground">
+          {message.profiles?.full_name?.charAt(0).toUpperCase() ?? "?"}
+        </div>
+      )}
+      <div className="max-w-[70%]">
+        {isOut && senderLabel && (
+          <div className="mb-0.5 flex items-center justify-end gap-1.5 text-[10px] text-muted-foreground">
+            <span className="font-medium">{senderLabel}</span>
+            <span className="flex h-4 w-4 items-center justify-center rounded-full bg-primary/20 text-[9px] font-bold text-primary">
+              {senderInitial}
+            </span>
+          </div>
         )}
-      >
-        <p className="whitespace-pre-wrap break-words">
-          {message.text ?? <em className="opacity-60">[{message.type}]</em>}
-        </p>
         <div
           className={cn(
-            "mt-1 flex items-center justify-end gap-1 text-[10px]",
-            isOut ? "text-primary-foreground/70" : "text-muted-foreground",
+            "rounded-2xl px-3 py-2 text-sm shadow-sm transition-colors",
+            isOut
+              ? "rounded-br-sm bg-primary text-primary-foreground"
+              : "rounded-bl-sm bg-background",
+            isUnread && "ring-2 ring-blue-400/70 font-medium",
           )}
         >
-          <time>
-            {new Date(message.created_at).toLocaleTimeString("es", {
-              hour: "2-digit",
-              minute: "2-digit",
-            })}
-          </time>
-          {isOut && <OutStatus status={message.status} isRead={isRead} />}
+          <p className="whitespace-pre-wrap break-words">
+            {message.text ?? <em className="opacity-60">[{message.type}]</em>}
+          </p>
+          <div
+            className={cn(
+              "mt-1 flex items-center justify-end gap-1 text-[10px]",
+              isOut ? "text-primary-foreground/70" : "text-muted-foreground",
+            )}
+          >
+            <time>
+              {new Date(message.created_at).toLocaleTimeString("es", {
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
+            </time>
+            {isOut && <OutStatus status={message.status} isRead={isRead} />}
+          </div>
         </div>
       </div>
     </div>
@@ -154,9 +181,21 @@ export function MessagesList({
           table: "messages",
           filter: `conversation_id=eq.${conversationId}`,
         },
-        (payload) => {
+        async (payload) => {
           // INSERT: new message arrived; UPDATE: e.g. read_at was set externally
-          const next = payload.new as Message;
+          const next = { ...(payload.new as Message) };
+
+          // Realtime doesn't include joined tables. If the message has
+          // sent_by but no profile, fetch it so we can show who sent it.
+          if (next.direction === "out" && next.sent_by && !next.profiles) {
+            const { data: profile } = await supabase
+              .from("profiles")
+              .select("full_name, email")
+              .eq("id", next.sent_by)
+              .maybeSingle();
+            if (profile) next.profiles = profile;
+          }
+
           setMessages((prev) => {
             const idx = prev.findIndex((m) => m.id === next.id);
             if (idx === -1) return dedupeAndMerge(prev, [next]);

@@ -305,8 +305,16 @@ export type Database = {
           error_code: string | null;
           error_message: string | null;
           read_at: string | null;
+          sent_by: string | null;
         }>;
-        Relationships: [];
+        Relationships: [
+          {
+            foreignKeyName: "messages_sent_by_fkey";
+            columns: ["sent_by"];
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       templates: {
         Row: {

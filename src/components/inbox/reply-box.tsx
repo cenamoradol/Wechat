@@ -1,12 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useTransition, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Send, Loader2 } from "lucide-react";
 import { sendMessageAction } from "@/app/(workspace)/inbox/actions";
 import { toast } from "sonner";
 
 export function ReplyBox({ conversationId }: { conversationId: string }) {
+  const router = useRouter();
   const [text, setText] = useState("");
   const [isPending, startTransition] = useTransition();
   const ref = useRef<HTMLTextAreaElement>(null);
@@ -28,8 +30,9 @@ export function ReplyBox({ conversationId }: { conversationId: string }) {
         toast.error(res.error);
       } else {
         setText("");
-        // Reload the page to show the new message
-        window.location.reload();
+        // Soft refresh — fetches new server data without full page reload
+        // The realtime subscription will also pick this up almost instantly
+        router.refresh();
       }
     });
   };
