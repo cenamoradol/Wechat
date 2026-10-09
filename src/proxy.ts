@@ -29,7 +29,11 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  if (user && isPublic) {
+  // Public paths that logged-in users are allowed to stay on (otherwise we'd
+  // bounce them away from password recovery before they can change their password).
+  const STAY_ON_IF_LOGGED_IN = new Set(["/reset-password", "/forgot-password"]);
+
+  if (user && isPublic && !STAY_ON_IF_LOGGED_IN.has(pathname)) {
     const url = request.nextUrl.clone();
     url.pathname = "/dashboard";
     url.search = "";
