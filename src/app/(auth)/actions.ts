@@ -138,10 +138,27 @@ export async function updatePasswordAction(
 
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: "La sesión expiró. Solicita un nuevo enlace de recuperación." };
+  if (!user) {
+    console.error("updatePasswordAction: no user in session");
+    return { error: "La sesión expiró. Solicita un nuevo enlace de recuperación." };
+  }
+
+  console.log("updatePasswordAction: attempting update for user", user.id, user.email);
 
   const { error } = await supabase.auth.updateUser({ password: parsed.data.password });
-  if (error) return { error: error.message };
+  if (error) {
+    console.error("updatePasswordAction failed:", error.message, "code:", error.status);
+    // Always sign out the recovery session, even on error, so the user
+    // doesn't end up "phantom-logged-in" without a valid session.
+    try {
+      await supabase.auth.signOut();
+    } catch (e) {
+      console.error("signOut after failed update also failed:", e);
+    }
+    return { error: `No se pudo cambiar la contraseña: ${error.message}. ¿Estás usando la misma contraseña?` };
+  }
+
+  console.log("updatePasswordAction: success for user", user.id);
 
   // Sign out so the user logs in fresh with the new password
   await supabase.auth.signOut();
