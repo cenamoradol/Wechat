@@ -28,6 +28,11 @@ export function ResetPasswordClient() {
     let cancelled = false;
     let timeoutId: ReturnType<typeof setTimeout> | undefined;
 
+    // Log the URL fragment for debugging (visible in Vercel logs)
+    if (typeof window !== "undefined" && window.location.hash) {
+      console.log("reset-password: URL fragment present", window.location.hash.substring(0, 50) + "...");
+    }
+
     const handleSession = (sessionEmail: string | null | undefined) => {
       if (cancelled) return;
       if (sessionEmail) {

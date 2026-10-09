@@ -98,20 +98,22 @@ export async function forgotPasswordAction(input: z.infer<typeof ForgotSchema>):
 
   const supabase = await createClient();
   const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000").replace(/\/$/, "");
+  const redirectTo = `${appUrl}/reset-password`;
   try {
     const { error } = await supabase.auth.resetPasswordForEmail(parsed.data.email, {
-      redirectTo: `${appUrl}/reset-password`,
+      redirectTo,
     });
     if (error) {
       console.error("resetPasswordForEmail error:", error.message, "for email:", parsed.data.email);
       return { error: `No se pudo enviar el email: ${error.message}` };
     }
+    console.log("resetPasswordForEmail sent to", parsed.data.email, "redirectTo:", redirectTo);
   } catch (e) {
     console.error("resetPasswordForEmail threw:", e);
     return { error: `Error inesperado: ${e instanceof Error ? e.message : "desconocido"}` };
   }
 
-  return { success: "Si el email existe, te hemos enviado un enlace para restablecer tu contraseña." };
+  return { success: `Si el email existe, te hemos enviado un enlace para restablecer tu contraseña a ${redirectTo}.` };
 }
 
 const UpdatePasswordSchema = z
