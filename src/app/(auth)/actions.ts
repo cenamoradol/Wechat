@@ -136,31 +136,56 @@ export async function updatePasswordAction(
   const parsed = UpdatePasswordSchema.safeParse(input);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
 
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) {
-    console.error("updatePasswordAction: no user in session");
-    return { error: "La sesión expiró. Solicita un nuevo enlace de recuperación." };
-  }
-
-  console.log("updatePasswordAction: attempting update for user", user.id, user.email);
-
-  const { error } = await supabase.auth.updateUser({ password: parsed.data.password });
-  if (error) {
-    console.error("updatePasswordAction failed:", error.message, "code:", error.status);
-    // Always sign out the recovery session, even on error, so the user
-    // doesn't end up "phantom-logged-in" without a valid session.
+  let signOutAttempted = false;
+  const safeSignOut = async () => {
+    if (signOutAttempted) return;
+    signOutAttempted = true;
     try {
+      const supabase = await createClient();
       await supabase.auth.signOut();
     } catch (e) {
-      console.error("signOut after failed update also failed:", e);
+      console.error("signOut failed:", e);
     }
-    return { error: `No se pudo cambiar la contraseña: ${error.message}. ¿Estás usando la misma contraseña?` };
+  };
+
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      console.error("updatePasswordAction: no user in session");
+      await safeSignOut();
+      return { error: "La sesión expiró. Solicita un nuevo enlace de recuperación." };
+    }
+
+    console.log("updatePasswordAction: attempting update for user", user.id, user.email);
+
+    const { error } = await supabase.auth.updateUser({ password: parsed.data.password });
+    if (error) {
+      console.error("updatePasswordAction failed:", error.message, "code:", error.status);
+      await safeSignOut();
+      return {
+        error: `No se pudo cambiar la contraseña: ${error.message}. ¿Estás usando la misma contraseña que la actual?`,
+      };
+    }
+
+    console.log("updatePasswordAction: success for user", user.id);
+    await safeSignOut();
+  } catch (e) {
+    // Catch anything unexpected so the form gets a normal return value
+    // (and we don't leak the recovery session).
+    console.error("updatePasswordAction unexpected throw:", e);
+    await safeSignOut();
+    return {
+      error: `Error inesperado: ${e instanceof Error ? e.message : String(e)}`,
+    };
   }
 
-  console.log("updatePasswordAction: success for user", user.id);
-
-  // Sign out so the user logs in fresh with the new password
-  await supabase.auth.signOut();
-  redirect("/login?reset=ok");
+  // If we got here, the update succeeded. Try to redirect.
+  try {
+    redirect("/login?reset=ok");
+  } catch (e) {
+    // redirect() always throws — this is the expected path in server actions.
+    // The framework catches NEXT_REDIRECT and handles it.
+    throw e;
+  }
 }

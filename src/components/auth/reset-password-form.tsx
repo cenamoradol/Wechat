@@ -41,21 +41,20 @@ export function ResetPasswordForm({ onSuccess }: { onSuccess?: () => void } = {}
 
   const onSubmit = (values: FormValues) => {
     startTransition(async () => {
-      try {
-        const res = await updatePasswordAction({
-          password: values.password,
-          confirm_password: values.confirm_password,
-        });
-        if (res?.error) {
-          toast.error(res.error);
-          return;
-        }
-        // Server action redirects on success. If onSuccess is provided, call it.
-        onSuccess?.();
-      } catch (e) {
-        if (e instanceof Error && e.message.includes("NEXT_REDIRECT")) throw e;
-        toast.error("Error inesperado al cambiar la contraseña");
+      const res = await updatePasswordAction({
+        password: values.password,
+        confirm_password: values.confirm_password,
+      });
+      if (!res) {
+        toast.error("Sin respuesta del servidor. Intenta de nuevo.");
+        return;
       }
+      if (res.error) {
+        toast.error(res.error);
+        return;
+      }
+      toast.success("Contraseña cambiada con éxito");
+      onSuccess?.();
     });
   };
 
