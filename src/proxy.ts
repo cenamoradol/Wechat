@@ -1,7 +1,15 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { updateSession } from "@/lib/supabase/middleware";
 
-const PUBLIC_PATHS = ["/login", "/signup", "/forgot-password", "/auth", "/api/debug/find-system-user", "/api/debug/list-bms"];
+const PUBLIC_PATHS = [
+  "/login",
+  "/signup",
+  "/forgot-password",
+  "/reset-password", // password recovery link from email — session is in URL fragment
+  "/auth",
+  "/api/debug/find-system-user",
+  "/api/debug/list-bms",
+];
 // Webhook endpoints are public — Meta calls them with signed payloads, no session
 const WEBHOOK_PREFIXES = ["/api/webhooks/", "/api/cron/"];
 const AUTH_PREFIXES = ["/accept-invite"];
