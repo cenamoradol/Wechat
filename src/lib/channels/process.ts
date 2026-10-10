@@ -117,11 +117,21 @@ export async function processInbound(m: NormalizedMessage): Promise<void> {
   const { data: conv, error: convErr } = await admin
     .from("conversations")
     .upsert(convFields, { onConflict: "contact_channel_id" })
-    .select("id")
+    .select("id, archived_at")
     .single();
   if (convErr || !conv) {
     console.error("conversation upsert failed", convErr);
     return;
+  }
+
+  // 4b. Auto-unarchive on new inbound message. The user explicitly chose
+  //     to "follow the plan" for archive+unarchive: the same number writing
+  //     again resurfaces the conversation in the main inbox.
+  if (m.direction === "in" && conv.archived_at) {
+    await admin
+      .from("conversations")
+      .update({ archived_at: null, archived_by: null })
+      .eq("id", conv.id);
   }
 
   // 5. Upsert message (idempotent on (conversation_id, external_id))

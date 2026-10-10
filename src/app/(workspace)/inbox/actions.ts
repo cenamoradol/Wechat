@@ -6,6 +6,8 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { decrypt } from "@/lib/crypto";
 import { getAdapter } from "@/lib/channels";
+import { deleteConversationMedia } from "@/lib/supabase/storage";
+import { getActiveWorkspaceIdAction } from "@/app/(workspace)/actions";
 
 const Schema = z.object({
   conversationId: z.string().min(1),
@@ -158,4 +160,146 @@ export async function markAsReadAction(conversationId: string): Promise<void> {
     .is("read_at", null);
   await admin.rpc("recompute_unread_count", { p_conversation_id: conversationId });
   revalidatePath("/inbox");
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Archive / Unarchive / Delete conversations
+// ──────────────────────────────────────────────────────────────────
+
+export type ArchiveActionResult = { error?: string; ok?: boolean };
+
+async function requireMemberForConversation(
+  conversationId: string,
+  requiredRoles: ("owner" | "admin" | "agent" | "viewer")[] = ["owner", "admin", "agent", "viewer"],
+): Promise<
+  | { error: string }
+  | { userId: string; workspaceId: string; role: string; conversationWorkspaceId: string }
+> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "No has iniciado sesión" };
+
+  const activeWorkspaceId = await getActiveWorkspaceIdAction();
+  if (!activeWorkspaceId) return { error: "No tienes un workspace activo" };
+
+  const admin = createAdminClient();
+
+  // Verify the conversation belongs to the active workspace
+  const { data: conv } = await admin
+    .from("conversations")
+    .select("workspace_id")
+    .eq("id", conversationId)
+    .maybeSingle();
+  if (!conv) return { error: "Conversación no encontrada" };
+  if (conv.workspace_id !== activeWorkspaceId) {
+    return { error: "Esta conversación no pertenece a tu workspace activo" };
+  }
+
+  // Verify membership
+  const { data: member } = await admin
+    .from("workspace_members")
+    .select("role")
+    .eq("workspace_id", activeWorkspaceId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (!member || !requiredRoles.includes(member.role as "owner" | "admin" | "agent" | "viewer")) {
+    return { error: "No tienes permiso para esta acción" };
+  }
+
+  return {
+    userId: user.id,
+    workspaceId: activeWorkspaceId,
+    role: member.role,
+    conversationWorkspaceId: conv.workspace_id,
+  };
+}
+
+/**
+ * Archive a conversation. Owner/admin only.
+ * Immediately deletes all media files (saves storage).
+ * Conversation stays in DB but is hidden from the main inbox.
+ * Auto-unarchives when a new inbound message arrives (see processInbound).
+ */
+export async function archiveConversationAction(
+  conversationId: string,
+): Promise<ArchiveActionResult> {
+  const ctx = await requireMemberForConversation(conversationId, ["owner", "admin"]);
+  if ("error" in ctx) return { error: ctx.error };
+
+  const admin = createAdminClient();
+
+  // 1. Set archived_at + archived_by
+  const { error: archErr } = await admin
+    .from("conversations")
+    .update({ archived_at: new Date().toISOString(), archived_by: ctx.userId })
+    .eq("id", conversationId)
+    .is("archived_at", null); // Don't overwrite if already archived
+  if (archErr) return { error: `No se pudo archivar: ${archErr.message}` };
+
+  // 2. Delete all media for this conversation (fire and forget; we don't want
+  //    archive to fail if a file is missing)
+  try {
+    const result = await deleteConversationMedia(conversationId);
+    if (result.errors > 0) {
+      console.warn(`archiveConversation: ${result.errors} media files failed to delete for ${conversationId}`);
+    }
+  } catch (e) {
+    console.error("archiveConversation: media delete threw", e);
+  }
+
+  revalidatePath("/inbox");
+  return { ok: true };
+}
+
+/**
+ * Unarchive a conversation. Owner/admin only.
+ * Media is gone forever (we already deleted it on archive).
+ */
+export async function unarchiveConversationAction(
+  conversationId: string,
+): Promise<ArchiveActionResult> {
+  const ctx = await requireMemberForConversation(conversationId, ["owner", "admin"]);
+  if ("error" in ctx) return { error: ctx.error };
+
+  const admin = createAdminClient();
+  const { error } = await admin
+    .from("conversations")
+    .update({ archived_at: null, archived_by: null })
+    .eq("id", conversationId);
+  if (error) return { error: `No se pudo desarchivar: ${error.message}` };
+
+  revalidatePath("/inbox");
+  return { ok: true };
+}
+
+/**
+ * Hard-delete a conversation. Owner only.
+ * Cascades to messages + contact_channels via FK ON DELETE.
+ * Caller is responsible for confirming with the user (typed name check).
+ */
+export async function deleteConversationAction(
+  conversationId: string,
+): Promise<ArchiveActionResult> {
+  const ctx = await requireMemberForConversation(conversationId, ["owner", "admin"]);
+  if ("error" in ctx) return { error: ctx.error };
+  if (ctx.role !== "owner") return { error: "Solo el owner puede eliminar conversaciones" };
+
+  const admin = createAdminClient();
+
+  // Delete media first (cascading FK doesn't help with storage)
+  try {
+    await deleteConversationMedia(conversationId);
+  } catch (e) {
+    console.error("deleteConversation: media delete threw", e);
+  }
+
+  // Hard delete the conversation (cascades to messages + contact_channels)
+  const { error } = await admin
+    .from("conversations")
+    .delete()
+    .eq("id", conversationId);
+  if (error) return { error: `No se pudo eliminar: ${error.message}` };
+
+  revalidatePath("/inbox");
+  return { ok: true };
 }

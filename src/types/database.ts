@@ -239,6 +239,8 @@ export type Database = {
           last_message_preview: string | null;
           unread_count: number;
           ai_agent_id: string | null;
+          archived_at: string | null;
+          archived_by: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -251,6 +253,8 @@ export type Database = {
           last_message_preview?: string | null;
           unread_count?: number;
           ai_agent_id?: string | null;
+          archived_at?: string | null;
+          archived_by?: string | null;
         };
         Update: Partial<{
           status: Database["public"]["Enums"]["conversation_status"];
@@ -259,6 +263,8 @@ export type Database = {
           last_message_preview: string | null;
           unread_count: number;
           ai_agent_id: string | null;
+          archived_at: string | null;
+          archived_by: string | null;
         }>;
         Relationships: [];
       };
