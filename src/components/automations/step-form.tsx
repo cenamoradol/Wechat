@@ -301,6 +301,20 @@ function StepFields({ step, options, onChange }: { step: Step; options: Options;
               </Select>
             </div>
           </div>
+          <p className="text-xs text-muted-foreground">
+            Variables: <code className="bg-muted px-1 rounded">{"{{contact.name}}"}</code>, <code className="bg-muted px-1 rounded">{"{{vars.orderId}}"}</code>, <code className="bg-muted px-1 rounded">{"{{vars.response.data.id}}"}</code>
+          </p>
+          {step.method === "GET" || step.method === "DELETE" ? (
+            <div>
+              <Label>Query params (opcional)</Label>
+              <KeyValueEditor
+                value={(step.queryParams ?? {}) as Record<string, string>}
+                onChange={(v) => onChange({ ...step, queryParams: v })}
+                keyPlaceholder="param"
+                valuePlaceholder="valor o {{vars.X}}"
+              />
+            </div>
+          ) : null}
           <div>
             <Label>Headers (opcional)</Label>
             <KeyValueEditor
@@ -310,19 +324,38 @@ function StepFields({ step, options, onChange }: { step: Step; options: Options;
               valuePlaceholder="Valor"
             />
           </div>
-          <div>
-            <Label>Body (JSON, opcional)</Label>
-            <Textarea
-              value={JSON.stringify(step.body ?? {}, null, 2)}
-              onChange={(e) => {
-                try {
-                  onChange({ ...step, body: JSON.parse(e.target.value) });
-                } catch {
-                  /* ignore parse error while typing */
-                }
-              }}
-              rows={3}
-              placeholder='{"contact": "{{contact.id}}"}'
+          {step.method === "POST" || step.method === "PUT" ? (
+            <div>
+              <Label>Body (JSON, opcional)</Label>
+              <Textarea
+                value={JSON.stringify(step.body ?? {}, null, 2)}
+                onChange={(e) => {
+                  try {
+                    onChange({ ...step, body: JSON.parse(e.target.value) });
+                  } catch {
+                    /* ignore parse error while typing */
+                  }
+                }}
+                rows={3}
+                placeholder='{"contact": "{{contact.id}}"}'
+              />
+            </div>
+          ) : null}
+          <div className="rounded-md border bg-muted/40 p-3 space-y-2">
+            <p className="text-xs font-medium">Extraer variables del response</p>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <Label className="text-xs">Guardar response como</Label>
+                <Input
+                  value={step.saveAs ?? ""}
+                  onChange={(e) => onChange({ ...step, saveAs: e.target.value || undefined })}
+                  placeholder="response"
+                />
+              </div>
+            </div>
+            <ExtractFieldsEditor
+              value={step.extractFields ?? []}
+              onChange={(v) => onChange({ ...step, extractFields: v })}
             />
           </div>
         </div>
@@ -520,6 +553,60 @@ function KeyValueEditor({
       ))}
       <Button type="button" variant="outline" size="sm" onClick={add}>
         <Plus className="h-3.5 w-3.5" /> Añadir
+      </Button>
+    </div>
+  );
+}
+
+function ExtractFieldsEditor({
+  value,
+  onChange,
+}: {
+  value: Array<{ name: string; path: string }>;
+  onChange: (v: Array<{ name: string; path: string }>) => void;
+}) {
+  return (
+    <div className="space-y-1">
+      <Label className="text-xs">Extraer fields del JSON response</Label>
+      {value.map((ef, i) => (
+        <div key={i} className="flex gap-1">
+          <Input
+            value={ef.name}
+            onChange={(e) => {
+              const next = [...value];
+              next[i] = { ...ef, name: e.target.value };
+              onChange(next);
+            }}
+            placeholder="nombre de la var"
+            className="flex-1"
+          />
+          <Input
+            value={ef.path}
+            onChange={(e) => {
+              const next = [...value];
+              next[i] = { ...ef, path: e.target.value };
+              onChange(next);
+            }}
+            placeholder="data.user.id"
+            className="flex-1"
+          />
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            onClick={() => onChange(value.filter((_, j) => j !== i))}
+          >
+            <X className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      ))}
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={() => onChange([...value, { name: "", path: "" }])}
+      >
+        <Plus className="h-3.5 w-3.5" /> Añadir field
       </Button>
     </div>
   );

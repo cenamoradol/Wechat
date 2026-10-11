@@ -28,8 +28,14 @@ const StepSchema: z.ZodType<unknown> = z.lazy(() =>
       type: z.literal("webhook"),
       url: z.string().max(2000),
       method: z.enum(["GET", "POST", "PUT", "DELETE"]),
-      headers: z.record(z.string(), z.string()).optional(),
+      queryParams: z.record(z.string(), z.string().max(2000)).optional(),
+      headers: z.record(z.string(), z.string().max(2000)).optional(),
       body: z.record(z.string(), z.unknown()).optional(),
+      saveAs: z.string().max(100).optional(),
+      extractFields: z
+        .array(z.object({ name: z.string().max(100), path: z.string().max(500) }))
+        .max(20)
+        .optional(),
     }),
     z.object({ type: z.literal("ai_reply"), agentId: z.string().max(100), handoffMessage: z.string().max(4096).optional() }),
     z.object({

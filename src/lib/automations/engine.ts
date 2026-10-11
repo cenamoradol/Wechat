@@ -3,7 +3,7 @@
 // evaluateTriggers(event): finds matching automations and enqueues new runs.
 
 import { createAdminClient } from "@/lib/supabase/admin";
-import { runStep, decryptChannelToken } from "./steps";
+import { runStep, decryptChannelToken, getPath } from "./steps";
 import { matchesTrigger } from "./triggers";
 import { parseDuration } from "./types";
 import type { RunContext, Step, StepLogEntry, TriggerEvent } from "./types";
@@ -126,6 +126,18 @@ export async function executeRun(runId: string): Promise<void> {
     const stepStart = Date.now();
     try {
       const output = await runStep(step, ctx);
+      // ponytail: webhook steps can stash their response (and any
+      // extracted fields) into ctx.vars so later steps can reference
+      // them via {{vars.X}} or {{vars.X.Y}}.
+      if (step.type === "webhook" && output && typeof output === "object") {
+        const o = output as { body?: unknown; status?: number };
+        const saveAs = (step as { saveAs?: string }).saveAs ?? "response";
+        ctx.vars[saveAs] = o;
+        for (const ef of (step as { extractFields?: Array<{ name: string; path: string }> }).extractFields ?? []) {
+          const v = getPath(o.body, ef.path);
+          if (v !== undefined) ctx.vars[ef.name] = v;
+        }
+      }
       await appendLog(runId, {
         step: i,
         type: step.type,

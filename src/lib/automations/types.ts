@@ -38,8 +38,18 @@ export type Step =
       type: "webhook";
       url: string;
       method: "GET" | "POST" | "PUT" | "DELETE";
+      // ponytail: optional URL query params (only appended for GET/DELETE
+      // since the body is the standard place for POST/PUT).
+      queryParams?: Record<string, string>;
       headers?: Record<string, string>;
       body?: Record<string, unknown>;
+      // ponytail: name of the var to store the response body under.
+      // Default "response". Use {{vars.response.X}} in later steps.
+      saveAs?: string;
+      // ponytail: pull specific fields out of the JSON response and store
+      // them at the top level of vars (e.g. {name: "orderId", path: "data.id"}
+      // lets you write {{vars.orderId}} later).
+      extractFields?: Array<{ name: string; path: string }>;
     }
   | {
       type: "ai_reply";

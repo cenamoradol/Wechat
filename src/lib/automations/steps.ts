@@ -9,12 +9,32 @@ import { decrypt } from "@/lib/crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 function interpolate(template: string, ctx: RunContext): string {
-  return template
-    .replace(/\{\{contact\.name\}\}/g, ctx.contact.name ?? "")
-    .replace(/\{\{contact\.phone\}\}/g, ctx.contact.phone ?? "")
-    .replace(/\{\{contact\.email\}\}/g, ctx.contact.email ?? "")
-    .replace(/\{\{contact\.id\}\}/g, ctx.contact.id)
-    .replace(/\{\{conversation\.id\}\}/g, ctx.conversation.id);
+  return template.replace(/\{\{([^}]+)\}\}/g, (_m, expr: string) => {
+    const v = resolveVar(expr.trim(), ctx);
+    return v == null ? "" : String(v);
+  });
+}
+
+function resolveVar(expr: string, ctx: RunContext): unknown {
+  // contact.* | conversation.* | vars.*
+  if (expr.startsWith("contact.")) {
+    const k = expr.slice("contact.".length);
+    return (ctx.contact as unknown as Record<string, unknown>)[k];
+  }
+  if (expr.startsWith("conversation.")) {
+    const k = expr.slice("conversation.".length);
+    return (ctx.conversation as unknown as Record<string, unknown>)[k];
+  }
+  if (expr.startsWith("vars.")) {
+    const path = expr.slice("vars.".length).split(".");
+    let cur: unknown = ctx.vars;
+    for (const p of path) {
+      if (cur == null || typeof cur !== "object") return undefined;
+      cur = (cur as Record<string, unknown>)[p];
+    }
+    return cur;
+  }
+  return undefined;
 }
 
 export async function runStep(step: Step, ctx: RunContext): Promise<unknown> {
@@ -132,20 +152,59 @@ export async function runStep(step: Step, ctx: RunContext): Promise<unknown> {
     }
 
     case "webhook": {
+      // ponytail: interpolate URL, query params, headers, and body from ctx
+      // (supports {{contact.X}} and {{vars.X.Y}}). Query params are only
+      // appended for GET/DELETE (POST/PUT send data in the body).
+      const interpolatedUrl = interpolate(step.url, ctx);
+      const finalUrl = appendQueryParams(interpolatedUrl, step.queryParams, ctx);
+
+      const interpolatedHeaders: Record<string, string> = {};
+      for (const [k, v] of Object.entries(step.headers ?? {})) {
+        interpolatedHeaders[k] = interpolate(v, ctx);
+      }
+
+      const isBodyMethod = step.method === "POST" || step.method === "PUT";
       const body =
-        typeof step.body === "object" && step.body
+        isBodyMethod && typeof step.body === "object" && step.body
           ? JSON.stringify(interpolateObject(step.body as Record<string, string>, ctx))
           : undefined;
-      const res = await fetch(step.url, {
+
+      const res = await fetch(finalUrl, {
         method: step.method,
         headers: {
           "Content-Type": "application/json",
-          ...(step.headers ?? {}),
+          ...interpolatedHeaders,
         },
-        body: step.method === "GET" ? undefined : body,
+        body,
       });
-      if (!res.ok) throw new Error(`Webhook ${step.method} ${step.url} returned ${res.status}`);
-      return { status: res.status };
+
+      // Parse response body. If JSON, parse; otherwise keep as text.
+      const contentType = res.headers.get("content-type") ?? "";
+      let responseBody: unknown;
+      const rawText = await res.text();
+      if (contentType.includes("application/json") && rawText) {
+        try {
+          responseBody = JSON.parse(rawText);
+        } catch {
+          responseBody = rawText;
+        }
+      } else {
+        responseBody = rawText;
+      }
+
+      if (!res.ok) {
+        throw new Error(
+          `Webhook ${step.method} ${finalUrl} returned ${res.status}: ${String(responseBody).slice(0, 200)}`,
+        );
+      }
+
+      // ponytail: stash the full response under saveAs (default "response")
+      // so subsequent steps can write {{vars.response.X}}.
+      const out: Record<string, unknown> = {
+        status: res.status,
+        body: responseBody,
+      };
+      return out;
     }
 
     case "ai_reply": {
@@ -278,6 +337,35 @@ function interpolateObject(
   const out: Record<string, string> = {};
   for (const [k, v] of Object.entries(obj)) out[k] = interpolate(v, ctx);
   return out;
+}
+
+// ponytail: append query params to a URL. Skips empty values. Supports
+// value interpolation via {{...}}.
+function appendQueryParams(
+  url: string,
+  params: Record<string, string> | undefined,
+  ctx: RunContext,
+): string {
+  if (!params || Object.keys(params).length === 0) return url;
+  const usp = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) {
+    const iv = interpolate(v, ctx).trim();
+    if (iv) usp.append(k, iv);
+  }
+  const qs = usp.toString();
+  if (!qs) return url;
+  return url.includes("?") ? `${url}&${qs}` : `${url}?${qs}`;
+}
+
+// ponytail: dot-path lookup. "data.user.id" -> obj.data.user.id
+export function getPath(obj: unknown, path: string): unknown {
+  const parts = path.split(".");
+  let cur: unknown = obj;
+  for (const p of parts) {
+    if (cur == null || typeof cur !== "object") return undefined;
+    cur = (cur as Record<string, unknown>)[p];
+  }
+  return cur;
 }
 
 async function persistOutboundMessage(
