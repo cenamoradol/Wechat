@@ -97,10 +97,11 @@ function MessageBubble({ message }: { message: Message }) {
               isOut ? "text-primary-foreground/70" : "text-muted-foreground",
             )}
           >
-            <time>
+            <time suppressHydrationWarning>
               {new Date(message.created_at).toLocaleTimeString("es", {
                 hour: "2-digit",
                 minute: "2-digit",
+                timeZone: typeof window === "undefined" ? "UTC" : undefined,
               })}
             </time>
             {isOut && <OutStatus status={message.status} isRead={isRead} />}
