@@ -20,6 +20,9 @@ export function matchesTrigger(trigger: Trigger, event: TriggerEvent): boolean {
   if (event.kind === "tag_added" && trigger.type === "tag_added") {
     return trigger.tagId === event.tagId;
   }
+  if (event.kind === "ai_classify" && trigger.type === "ai_classify") {
+    return trigger.agentId === event.agentId && trigger.criteria === event.criteria;
+  }
   return false;
 }
 

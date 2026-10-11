@@ -469,6 +469,139 @@ export type Database = {
         }>;
         Relationships: [];
       };
+      ai_agents: {
+        Row: {
+          id: string;
+          workspace_id: string;
+          name: string;
+          description: string | null;
+          provider: "openai" | "anthropic";
+          model: string;
+          system_prompt: string;
+          temperature: number;
+          max_tokens: number;
+          kb_enabled: boolean;
+          auto_reply_enabled: boolean;
+          max_replies_per_conversation: number;
+          handoff_keywords: string[];
+          is_default: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          workspace_id: string;
+          name: string;
+          description?: string | null;
+          provider: "openai" | "anthropic";
+          model: string;
+          system_prompt: string;
+          temperature?: number;
+          max_tokens?: number;
+          kb_enabled?: boolean;
+          auto_reply_enabled?: boolean;
+          max_replies_per_conversation?: number;
+          handoff_keywords?: string[];
+          is_default?: boolean;
+        };
+        Update: Partial<{
+          name: string;
+          description: string | null;
+          provider: "openai" | "anthropic";
+          model: string;
+          system_prompt: string;
+          temperature: number;
+          max_tokens: number;
+          kb_enabled: boolean;
+          auto_reply_enabled: boolean;
+          max_replies_per_conversation: number;
+          handoff_keywords: string[];
+          is_default: boolean;
+          updated_at: string;
+        }>;
+        Relationships: [];
+      };
+      ai_knowledge_docs: {
+        Row: {
+          id: string;
+          workspace_id: string;
+          agent_id: string;
+          title: string;
+          source_url: string | null;
+          content: string;
+          tokens: number | null;
+          created_at: string;
+        };
+        Insert: {
+          workspace_id: string;
+          agent_id: string;
+          title: string;
+          content: string;
+          source_url?: string | null;
+          tokens?: number | null;
+        };
+        Update: Partial<{
+          title: string;
+          content: string;
+          source_url: string | null;
+          tokens: number | null;
+        }>;
+        Relationships: [];
+      };
+      ai_messages: {
+        Row: {
+          id: string;
+          agent_id: string;
+          conversation_id: string | null;
+          contact_id: string | null;
+          role: "user" | "assistant" | "system";
+          content: string;
+          tokens_in: number | null;
+          tokens_out: number | null;
+          latency_ms: number | null;
+          created_at: string;
+        };
+        Insert: {
+          agent_id: string;
+          conversation_id?: string | null;
+          contact_id?: string | null;
+          role: "user" | "assistant" | "system";
+          content: string;
+          tokens_in?: number | null;
+          tokens_out?: number | null;
+          latency_ms?: number | null;
+        };
+        Update: Partial<{
+          content: string;
+          tokens_in: number | null;
+          tokens_out: number | null;
+          latency_ms: number | null;
+        }>;
+        Relationships: [];
+      };
+      ai_provider_keys: {
+        Row: {
+          id: string;
+          workspace_id: string;
+          provider: "openai" | "anthropic";
+          api_key_enc: string;
+          label: string | null;
+          last_used_at: string | null;
+          created_at: string;
+        };
+        Insert: {
+          workspace_id: string;
+          provider: "openai" | "anthropic";
+          api_key_enc: string;
+          label?: string | null;
+          last_used_at?: string | null;
+        };
+        Update: Partial<{
+          api_key_enc: string;
+          label: string | null;
+          last_used_at: string | null;
+        }>;
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: {

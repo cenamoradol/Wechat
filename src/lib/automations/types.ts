@@ -14,7 +14,15 @@ export type Trigger =
   | { type: "message_unanswered"; minutes: number; channel: ChannelFilter }
   | { type: "contact_created"; channel: ChannelFilter }
   | { type: "tag_added"; tagId: string }
-  | { type: "schedule"; cron: string; timezone: string };
+  | { type: "schedule"; cron: string; timezone: string }
+  | {
+      // ponytail: AI-powered trigger. The criteria is a natural language
+      // description. The LLM decides if the message matches. Uses the
+      // agent's provider/model but ignores its system prompt.
+      type: "ai_classify";
+      agentId: string;
+      criteria: string;
+    };
 
 export type Step =
   | { type: "send_text"; text: string }
@@ -93,6 +101,19 @@ export type TriggerEvent =
       channelId: string;
       channelType: "whatsapp" | "facebook" | "instagram";
       tagId: string;
+    }
+  | {
+      kind: "ai_classify";
+      workspaceId: string;
+      conversationId: string;
+      contactId: string;
+      contactChannelId: string;
+      channelId: string;
+      channelType: "whatsapp" | "facebook" | "instagram";
+      messageText: string | null;
+      messageId: string;
+      agentId: string;
+      criteria: string;
     };
 
 export type RunContext = {

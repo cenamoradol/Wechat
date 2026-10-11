@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import {
@@ -28,6 +29,7 @@ const TRIGGER_LABELS: Array<{ value: Trigger["type"]; label: string; description
   { value: "contact_created", label: "Contacto nuevo", description: "Cuando llega un contacto nuevo" },
   { value: "tag_added", label: "Etiqueta añadida", description: "Cuando se etiqueta al contacto" },
   { value: "schedule", label: "Programado (cron)", description: "Corre según horario" },
+  { value: "ai_classify", label: "🤖 Clasificar con IA", description: "El LLM decide según un criterio en lenguaje natural" },
 ];
 
 export function AutomationEditor({ initial }: Props) {
@@ -45,7 +47,8 @@ export function AutomationEditor({ initial }: Props) {
     templates: Array<{ id: string; name: string; language: string }>;
     members: Array<{ id: string; full_name: string | null; email: string }>;
     customFields: Array<{ id: string; name: string; type: string }>;
-  }>({ tags: [], templates: [], members: [], customFields: [] });
+    aiAgents: Array<{ id: string; name: string; provider: string; model: string }>;
+  }>({ tags: [], templates: [], members: [], customFields: [], aiAgents: [] });
 
   useEffect(() => {
     listAutomationOptionsAction()
@@ -56,6 +59,7 @@ export function AutomationEditor({ initial }: Props) {
           templates: res.templates ?? [],
           members: res.members ?? [],
           customFields: res.customFields ?? [],
+          aiAgents: res.aiAgents ?? [],
         });
       })
       .catch((e) => console.error(e));
@@ -205,6 +209,8 @@ function defaultTriggerFor(t: Trigger["type"]): Trigger {
       return { type: "tag_added", tagId: "" };
     case "schedule":
       return { type: "schedule", cron: "0 9 * * *", timezone: "America/Tegucigalpa" };
+    case "ai_classify":
+      return { type: "ai_classify", agentId: "", criteria: "" };
   }
 }
 
@@ -217,8 +223,51 @@ function TriggerFields({
   onChange: (t: Trigger) => void;
   options: {
     tags: Array<{ id: string; name: string; color: string }>;
+    aiAgents: Array<{ id: string; name: string; provider: string; model: string }>;
   };
 }) {
+  if (trigger.type === "ai_classify") {
+    return (
+      <div className="space-y-3">
+        <div>
+          <Label>Agente (provee el modelo)</Label>
+          <Select
+            value={trigger.agentId}
+            onValueChange={(v) => onChange({ ...trigger, agentId: v })}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Selecciona agente IA" />
+            </SelectTrigger>
+            <SelectContent>
+              {options.aiAgents && options.aiAgents.length > 0 ? (
+                options.aiAgents.map((a) => (
+                  <SelectItem key={a.id} value={a.id}>
+                    {a.name} ({a.provider} · {a.model})
+                  </SelectItem>
+                ))
+              ) : (
+                <div className="p-2 text-xs text-muted-foreground">
+                  Sin agentes. Crea uno en /ai-agents.
+                </div>
+              )}
+            </SelectContent>
+          </Select>
+        </div>
+        <div>
+          <Label>Criterio (en lenguaje natural)</Label>
+          <Textarea
+            value={trigger.criteria}
+            onChange={(e) => onChange({ ...trigger, criteria: e.target.value })}
+            rows={3}
+            placeholder='Ej: "El cliente quiere hablar con un humano o está frustrado"'
+          />
+          <p className="mt-1 text-xs text-muted-foreground">
+            El LLM recibe el último mensaje y responde con {"{matches: true/false, reasoning: '...'}"} según si cumple el criterio.
+          </p>
+        </div>
+      </div>
+    );
+  }
   if (trigger.type === "message_received") {
     return (
       <div className="grid grid-cols-2 gap-2">

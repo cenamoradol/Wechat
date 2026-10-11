@@ -64,6 +64,11 @@ const TriggerSchema = z.union([
   }),
   z.object({ type: z.literal("tag_added"), tagId: z.string().max(100) }),
   z.object({ type: z.literal("schedule"), cron: z.string().min(1).max(100), timezone: z.string().min(1).max(100) }),
+  z.object({
+    type: z.literal("ai_classify"),
+    agentId: z.string().max(100),
+    criteria: z.string().min(1).max(2000),
+  }),
 ]);
 
 const AutomationSchema = z.object({

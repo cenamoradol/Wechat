@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Send, Loader2, Mic } from "lucide-react";
+import { Send, Loader2, Mic, Sparkles, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
@@ -15,6 +15,7 @@ import {
   type UploadedFile,
 } from "./media/media-upload";
 import { VoiceRecorder } from "./media/voice-recorder";
+import { suggestReplyAction } from "@/app/(workspace)/inbox/ai-suggest-action";
 import { cn } from "@/lib/utils";
 
 export function ReplyBox({ conversationId }: { conversationId: string }) {
@@ -25,7 +26,31 @@ export function ReplyBox({ conversationId }: { conversationId: string }) {
   const [showRecorder, setShowRecorder] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const [aiSuggest, setAiSuggest] = useState<{ text: string; sources: Array<{ id: string; title: string; snippet: string }> } | null>(null);
+  const [isSuggesting, setIsSuggesting] = useState(false);
   const ref = useRef<HTMLTextAreaElement>(null);
+
+  const onSuggest = () => {
+    setIsSuggesting(true);
+    setAiSuggest(null);
+    void (async () => {
+      const res = await suggestReplyAction({ conversationId });
+      if (res.error) {
+        toast.error(res.error);
+      } else if (res.content) {
+        setAiSuggest({ text: res.content, sources: res.sources ?? [] });
+      }
+      setIsSuggesting(false);
+    })();
+  };
+
+  const useAiSuggestion = () => {
+    if (aiSuggest) {
+      setText(aiSuggest.text);
+      setAiSuggest(null);
+      ref.current?.focus();
+    }
+  };
 
   useEffect(() => {
     ref.current?.focus();
@@ -183,6 +208,37 @@ export function ReplyBox({ conversationId }: { conversationId: string }) {
             Suelta el archivo aquí para adjuntarlo
           </div>
         )}
+        {aiSuggest && (
+          <div className="border-t bg-primary/5 p-3">
+            <div className="mb-2 flex items-center justify-between">
+              <p className="flex items-center gap-1.5 text-xs font-medium text-primary">
+                <Sparkles className="h-3.5 w-3.5" />
+                Sugerencia de IA
+              </p>
+              <button
+                type="button"
+                onClick={() => setAiSuggest(null)}
+                className="rounded p-0.5 hover:bg-muted"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+            <p className="whitespace-pre-wrap text-sm">{aiSuggest.text}</p>
+            {aiSuggest.sources.length > 0 && (
+              <p className="mt-2 text-xs text-muted-foreground">
+                📚 {aiSuggest.sources.map((s) => s.title).join(", ")}
+              </p>
+            )}
+            <div className="mt-2 flex gap-2">
+              <Button size="sm" onClick={useAiSuggestion} type="button">
+                Usar
+              </Button>
+              <Button size="sm" variant="ghost" onClick={onSuggest} type="button">
+                Regenerar
+              </Button>
+            </div>
+          </div>
+        )}
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -200,6 +256,16 @@ export function ReplyBox({ conversationId }: { conversationId: string }) {
             disabled={isPending}
           >
             <Mic className={cn("h-4 w-4", showRecorder && "text-red-500")} />
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            title="Sugerir respuesta con IA"
+            onClick={onSuggest}
+            disabled={isPending || isSuggesting}
+          >
+            {isSuggesting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4 text-primary" />}
           </Button>
           <Textarea
             ref={ref}

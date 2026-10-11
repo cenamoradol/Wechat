@@ -7,6 +7,7 @@ import { runStep, decryptChannelToken } from "./steps";
 import { matchesTrigger } from "./triggers";
 import { parseDuration } from "./types";
 import type { RunContext, Step, StepLogEntry, TriggerEvent } from "./types";
+import { classifyMessage } from "@/lib/ai/chat";
 
 /**
  * Evaluate all active automations for the workspace and create new runs
@@ -14,6 +15,10 @@ import type { RunContext, Step, StepLogEntry, TriggerEvent } from "./types";
  * handler when a new message arrives, a contact is created, etc.
  */
 export async function evaluateTriggers(event: TriggerEvent): Promise<number> {
+  // ponytail: For ai_classify triggers, evaluate the LLM first. If the
+  // message doesn't match, we skip. We emit a synthetic ai_classify
+  // event for each active ai_classify trigger and let matchesTrigger do
+  // the rest.
   const admin = createAdminClient();
   const { data: automations, error } = await admin
     .from("automations")
@@ -27,7 +32,36 @@ export async function evaluateTriggers(event: TriggerEvent): Promise<number> {
 
   let created = 0;
   for (const a of automations) {
-    if (!matchesTrigger(a.trigger as never, event)) continue;
+    const trigger = a.trigger as { type: string; [k: string]: unknown };
+
+    // For ai_classify, evaluate the LLM first
+    if (trigger.type === "ai_classify") {
+      if (event.kind !== "message_received" || !event.messageText) continue;
+      const t = trigger as { type: "ai_classify"; agentId: string; criteria: string };
+      if (!t.agentId || !t.criteria) continue;
+      // Look up the agent (we need provider + model)
+      const { data: agent } = await admin
+        .from("ai_agents")
+        .select("id, provider, model, workspace_id")
+        .eq("id", t.agentId)
+        .maybeSingle();
+      if (!agent) continue;
+      try {
+        const cls = await classifyMessage({
+          agent: { id: agent.id, workspaceId: agent.workspace_id, provider: agent.provider as "openai" | "anthropic", model: agent.model },
+          messageText: event.messageText,
+          criteria: t.criteria,
+        });
+        if (!cls.matches) continue;
+      } catch (e) {
+        console.error("ai_classify failed", e);
+        continue;
+      }
+      if (!matchesTrigger(trigger as never, event)) continue;
+    } else {
+      if (!matchesTrigger(trigger as never, event)) continue;
+    }
+
     const conversationId =
       event.kind === "message_received" || event.kind === "message_unanswered"
         ? event.conversationId

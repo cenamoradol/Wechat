@@ -9,6 +9,7 @@ import {
   Settings,
   Contact,
   Zap,
+  Bot,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -17,6 +18,7 @@ const nav = [
   { href: "/inbox", label: "Inbox", icon: Inbox },
   { href: "/contacts", label: "Contactos", icon: Contact },
   { href: "/automations", label: "Automatizaciones", icon: Zap },
+  { href: "/ai-agents", label: "Agentes IA", icon: Bot },
   { href: "/team", label: "Equipo", icon: Users },
   { href: "/settings/workspace", label: "Workspace", icon: Settings },
   { href: "/settings", label: "Configuración", icon: Settings },

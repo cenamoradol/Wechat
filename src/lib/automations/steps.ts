@@ -149,10 +149,99 @@ export async function runStep(step: Step, ctx: RunContext): Promise<unknown> {
     }
 
     case "ai_reply": {
-      // ponytail: AI agents are Fase 7. Until then, this step is a no-op
-      // that throws so the run is marked failed and the user knows to
-      // configure the agent.
-      throw new Error("AI agents not yet enabled (Fase 7 pending)");
+      // Load the agent and call the LLM with the conversation context.
+      const admin = createAdminClient();
+      const { data: a } = await admin
+        .from("ai_agents")
+        .select("*")
+        .eq("id", step.agentId)
+        .maybeSingle();
+      if (!a) throw new Error(`AI agent ${step.agentId} not found`);
+
+      // Load last 20 messages for context
+      const { data: msgs } = await admin
+        .from("messages")
+        .select("direction, text, sent_by")
+        .eq("conversation_id", ctx.conversation.id)
+        .is("deleted_at", null)
+        .order("created_at", { ascending: true })
+        .limit(20);
+
+      const chatMessages: Array<{ role: "user" | "assistant"; content: string }> = (msgs ?? []).map((m) => ({
+        role: m.direction === "in" ? "user" : "assistant",
+        content: m.text ?? "",
+      }));
+
+      // Generate reply
+      const { generateAgentReply } = await import("@/lib/ai/chat");
+      const { shouldHandoff } = await import("@/lib/ai/handoff");
+      const recent: Array<{ direction: "in" | "out"; text: string | null; sent_by: string | null }> = (msgs ?? []).map((m) => ({
+        direction: m.direction as "in" | "out",
+        text: m.text,
+        sent_by: m.sent_by,
+      }));
+      const handoff = shouldHandoff(
+        {
+          id: a.id,
+          workspaceId: a.workspace_id,
+          name: a.name,
+          description: a.description,
+          provider: a.provider as "openai" | "anthropic",
+          model: a.model,
+          systemPrompt: a.system_prompt,
+          temperature: Number(a.temperature),
+          maxTokens: a.max_tokens,
+          kbEnabled: a.kb_enabled,
+          autoReplyEnabled: a.auto_reply_enabled,
+          maxRepliesPerConversation: a.max_replies_per_conversation,
+          handoffKeywords: a.handoff_keywords ?? [],
+          isDefault: a.is_default,
+          createdAt: a.created_at,
+          updatedAt: a.updated_at,
+        },
+        recent,
+      );
+      if (handoff.handoff) {
+        return { handoff: true, reason: handoff.reason };
+      }
+
+      const res = await generateAgentReply({
+        agent: {
+          id: a.id,
+          workspaceId: a.workspace_id,
+          name: a.name,
+          description: a.description,
+          provider: a.provider as "openai" | "anthropic",
+          model: a.model,
+          systemPrompt: a.system_prompt,
+          temperature: Number(a.temperature),
+          maxTokens: a.max_tokens,
+          kbEnabled: a.kb_enabled,
+          autoReplyEnabled: a.auto_reply_enabled,
+          maxRepliesPerConversation: a.max_replies_per_conversation,
+          handoffKeywords: a.handoff_keywords ?? [],
+          isDefault: a.is_default,
+          createdAt: a.created_at,
+          updatedAt: a.updated_at,
+        },
+        messages: chatMessages,
+        contactVars: {
+          "contact.name": ctx.contact.name ?? "",
+          "contact.phone": ctx.contact.phone ?? "",
+          "contact.email": ctx.contact.email ?? "",
+        },
+      });
+
+      // Send via the channel
+      const adapter = getAdapter(ctx.channel.type);
+      const sendRes = await adapter.sendText({
+        accessToken: ctx.channel.accessToken,
+        fromExternalId: ctx.channel.externalId,
+        toExternalId: ctx.contactChannel.externalUserId,
+        text: res.content,
+      });
+      await persistOutboundMessage(ctx, "text", res.content, sendRes.externalId);
+      return { externalId: sendRes.externalId, usage: res.usage };
     }
 
     case "branch": {
