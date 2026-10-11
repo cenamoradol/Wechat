@@ -11,7 +11,12 @@ import { createAdminClient } from "@/lib/supabase/admin";
 function interpolate(template: string, ctx: RunContext): string {
   return template.replace(/\{\{([^}]+)\}\}/g, (_m, expr: string) => {
     const v = resolveVar(expr.trim(), ctx);
-    return v == null ? "" : String(v);
+    if (v == null) return "";
+    if (typeof v === "string") return v;
+    if (typeof v === "number" || typeof v === "boolean") return String(v);
+    // ponytail: objects/arrays get JSON-stringified so the LLM (or any
+    // text-only consumer) sees a readable shape, not "[object Object]".
+    return JSON.stringify(v);
   });
 }
 
