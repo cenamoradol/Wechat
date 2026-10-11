@@ -34,9 +34,10 @@ const MODELS: Record<"openai" | "anthropic" | "minimax", Array<{ value: string; 
     { value: "claude-3-opus-latest", label: "Claude 3 Opus" },
   ],
   minimax: [
-    { value: "MiniMax-Text-01", label: "MiniMax-Text-01 (recomendado)" },
-    { value: "abab6.5s-chat", label: "abab6.5s-chat" },
-    { value: "abab6.5-chat", label: "abab6.5-chat" },
+    { value: "MiniMax-M3.1-Flash-Preview", label: "MiniMax-M3.1-Flash-Preview (M Plan / Token Plan)" },
+    { value: "MiniMax-M3", label: "MiniMax-M3" },
+    { value: "MiniMax-M2.7-highspeed", label: "MiniMax-M2.7-highspeed (rápido)" },
+    { value: "MiniMax-M2.5-highspeed", label: "MiniMax-M2.5-highspeed (rápido)" },
   ],
 };
 

@@ -14,9 +14,11 @@ import type { AIProvider } from "./types";
 export const PROVIDER_CONFIG: Record<AIProvider, { baseUrl: string; testModel: string; format: "openai" | "anthropic" }> = {
   openai: { baseUrl: "https://api.openai.com/v1", testModel: "gpt-4o-mini", format: "openai" },
   anthropic: { baseUrl: "https://api.anthropic.com", testModel: "claude-3-5-haiku-latest", format: "anthropic" },
-  // ponytail: MiniMax's real OpenAI-compat endpoint is /v1/text/chatcompletion_v2
-  // (NOT /chat/completions). Their error format also differs (base_resp wrapper).
-  minimax: { baseUrl: "https://api.minimaxi.com", testModel: "MiniMax-Text-01", format: "openai" },
+  // ponytail: MiniMax real base URL is api.minimax.io (NOT api.minimaxi.com
+  // or api.minimax.io/anthropic). It's OpenAI-compat at /v1/chat/completions
+  // with Authorization: Bearer. MiniMax-M3.1-Flash-Preview is the M Plan /
+  // Token Plan model. base_resp.status_code is the success flag.
+  minimax: { baseUrl: "https://api.minimax.io", testModel: "MiniMax-M3.1-Flash-Preview", format: "openai" },
 };
 
 export async function getApiKey(
@@ -100,8 +102,9 @@ export async function pingProvider(
   const cfg = PROVIDER_CONFIG[provider];
   try {
     if (cfg.format === "openai") {
-      // MiniMax uses /v1/text/chatcompletion_v2; OpenAI uses /chat/completions.
-      const path = provider === "minimax" ? "/v1/text/chatcompletion_v2" : "/chat/completions";
+      // OpenAI: /chat/completions. MiniMax: /v1/chat/completions (their
+      // official OpenAI-compat path per platform.minimax.io docs).
+      const path = provider === "minimax" ? "/v1/chat/completions" : "/chat/completions";
       const res = await fetch(`${cfg.baseUrl}${path}`, {
         method: "POST",
         headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
@@ -112,7 +115,7 @@ export async function pingProvider(
         }),
       });
       const txt = await res.text();
-      // MiniMax returns 200 OK with base_resp.status_code for auth errors.
+      // MiniMax returns 200 with base_resp.status_code != 0 on auth errors.
       if (provider === "minimax") {
         try {
           const j = JSON.parse(txt) as { base_resp?: { status_code: number; status_msg: string } };
@@ -141,7 +144,7 @@ export async function pingProvider(
       });
       if (!res.ok) {
         const txt = await res.text();
-        return { ok: false, error: `Anthropic ${res.status}: ${txt.slice(0, 200)}` };
+        return { ok: false, error: `${provider} ${res.status}: ${txt.slice(0, 200)}` };
       }
       return { ok: true };
     }

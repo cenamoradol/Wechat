@@ -43,7 +43,7 @@ export async function generateAgentReply(args: {
 
   if (args.agent.provider === "openai" || args.agent.provider === "minimax") {
     const cfg = PROVIDER_CONFIG[args.agent.provider];
-    const path = args.agent.provider === "minimax" ? "/v1/text/chatcompletion_v2" : "/chat/completions";
+    const path = args.agent.provider === "minimax" ? "/v1/chat/completions" : "/chat/completions";
     const res = await fetch(`${cfg.baseUrl}${path}`, {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
@@ -59,23 +59,16 @@ export async function generateAgentReply(args: {
     });
     if (!res.ok) {
       const txt = await res.text();
-      // MiniMax wraps errors in base_resp
-      if (args.agent.provider === "minimax") {
-        try {
-          const j = JSON.parse(txt) as { base_resp?: { status_code: number; status_msg: string } };
-          if (j.base_resp?.status_code && j.base_resp.status_code !== 0) {
-            throw new Error(`${args.agent.provider} ${j.base_resp.status_code}: ${j.base_resp.status_msg}`);
-          }
-        } catch (e) {
-          if (e instanceof Error && e.message.startsWith("minimax")) throw e;
-        }
-      }
       throw new Error(`${args.agent.provider} ${res.status}: ${txt.slice(0, 200)}`);
     }
     const json = (await res.json()) as {
       choices: Array<{ message: { content: string } }>;
       usage?: { prompt_tokens: number; completion_tokens: number };
+      base_resp?: { status_code: number; status_msg: string };
     };
+    if (args.agent.provider === "minimax" && json.base_resp?.status_code && json.base_resp.status_code !== 0) {
+      throw new Error(`minimax ${json.base_resp.status_code}: ${json.base_resp.status_msg}`);
+    }
     reply = json.choices[0]?.message?.content ?? "";
     usage = {
       tokensIn: json.usage?.prompt_tokens ?? 0,
@@ -83,8 +76,8 @@ export async function generateAgentReply(args: {
       latencyMs: Date.now() - start,
     };
   } else {
-    // Anthropic and Minimax (both use Anthropic-style API).
-    const cfg = PROVIDER_CONFIG[args.agent.provider];
+    // Anthropic
+    const cfg = PROVIDER_CONFIG.anthropic;
     const res = await fetch(`${cfg.baseUrl}/v1/messages`, {
       method: "POST",
       headers: {
@@ -102,7 +95,7 @@ export async function generateAgentReply(args: {
     });
     if (!res.ok) {
       const txt = await res.text();
-      throw new Error(`${args.agent.provider} ${res.status}: ${txt.slice(0, 200)}`);
+      throw new Error(`anthropic ${res.status}: ${txt.slice(0, 200)}`);
     }
     const json = (await res.json()) as {
       content: Array<{ type: string; text?: string }>;
@@ -147,7 +140,7 @@ Mensaje del usuario: """${args.messageText}"""
   let text = "";
   if (args.agent.provider === "openai" || args.agent.provider === "minimax") {
     const cfg = PROVIDER_CONFIG[args.agent.provider];
-    const path = args.agent.provider === "minimax" ? "/v1/text/chatcompletion_v2" : "/chat/completions";
+    const path = args.agent.provider === "minimax" ? "/v1/chat/completions" : "/chat/completions";
     const body: Record<string, unknown> = {
       model: args.agent.model,
       temperature: args.agent.temperature ?? 0,
@@ -177,8 +170,8 @@ Mensaje del usuario: """${args.messageText}"""
     }
     text = json.choices[0]?.message?.content ?? "";
   } else {
-    // Anthropic / Minimax
-    const cfg = PROVIDER_CONFIG[args.agent.provider];
+    // Anthropic
+    const cfg = PROVIDER_CONFIG.anthropic;
     const res = await fetch(`${cfg.baseUrl}/v1/messages`, {
       method: "POST",
       headers: {
@@ -196,7 +189,7 @@ Mensaje del usuario: """${args.messageText}"""
     });
     if (!res.ok) {
       const t = await res.text();
-      throw new Error(`${args.agent.provider} ${res.status}: ${t.slice(0, 200)}`);
+      throw new Error(`anthropic ${res.status}: ${t.slice(0, 200)}`);
     }
     const json = (await res.json()) as {
       content: Array<{ type: string; text?: string }>;
