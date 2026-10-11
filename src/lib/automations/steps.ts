@@ -303,6 +303,102 @@ export async function runStep(step: Step, ctx: RunContext): Promise<unknown> {
       return { externalId: sendRes.externalId, usage: res.usage };
     }
 
+    case "ai_extract": {
+      // ponytail: extract structured fields from the customer's message
+      // (or a custom instruction text). The LLM is told the schema and
+      // must return a JSON object. The engine then merges the result
+      // into ctx.vars so subsequent steps can reference {{vars.X}}.
+      const admin = createAdminClient();
+      const { data: a } = await admin
+        .from("ai_agents")
+        .select("*")
+        .eq("id", step.agentId)
+        .maybeSingle();
+      if (!a) throw new Error(`AI agent ${step.agentId} not found`);
+
+      // Source text: prefer the trigger's original message; fall back to
+      // any previously-stored var. Supports {{vars.X}} interpolation in
+      // the instruction itself.
+      const sourceText =
+        (ctx.vars as Record<string, unknown>).messageText ??
+        (ctx.triggerData as { messageText?: string }).messageText ??
+        "";
+
+      const systemPrompt = `${step.instruction}
+
+Responde SOLO con un JSON válido (sin markdown, sin texto adicional) con exactamente este shape:
+{
+${step.fields.map((f) => `  "${f.name}": ${f.type === "number" ? "número o null" : f.type === "boolean" ? "true o false o null" : "string o null"}`).join(",\n")}
+}
+
+Reglas:
+- Si el cliente no menciona un campo, usa null.
+- NO inventes valores. Si no está explícito, null.
+- NO agregues campos extra.`;
+
+      const userPrompt = `Texto del cliente:
+"""
+${sourceText}
+"""
+
+Extrae los campos según las instrucciones del sistema.`;
+
+      const { generateAgentReply } = await import("@/lib/ai/chat");
+      const res = await generateAgentReply({
+        agent: {
+          id: a.id,
+          workspaceId: a.workspace_id,
+          name: a.name,
+          description: a.description,
+          provider: a.provider as "openai" | "anthropic" | "minimax",
+          model: a.model,
+          systemPrompt: a.system_prompt,
+          temperature: Number(a.temperature),
+          maxTokens: a.max_tokens,
+          kbEnabled: a.kb_enabled,
+          autoReplyEnabled: a.auto_reply_enabled,
+          maxRepliesPerConversation: a.max_replies_per_conversation,
+          handoffKeywords: a.handoff_keywords ?? [],
+          isDefault: a.is_default,
+          createdAt: a.created_at,
+          updatedAt: a.updated_at,
+        },
+        messages: [{ role: "user", content: userPrompt }],
+        contactVars: {
+          "contact.name": ctx.contact.name ?? "",
+          "contact.phone": ctx.contact.phone ?? "",
+        },
+      });
+
+      // Parse the JSON out of the LLM response (model may add stray
+      // whitespace or wrap in code fences).
+      const m = res.content.match(/\{[\s\S]*\}/);
+      if (!m) throw new Error(`ai_extract: no JSON in response: ${res.content.slice(0, 200)}`);
+      let parsed: Record<string, unknown>;
+      try {
+        parsed = JSON.parse(m[0]);
+      } catch (e) {
+        throw new Error(`ai_extract: invalid JSON: ${(e as Error).message} | ${m[0].slice(0, 200)}`);
+      }
+
+      // Cast to the declared types and return as the step output. The
+      // engine will merge this into ctx.vars.
+      const out: Record<string, unknown> = {};
+      for (const f of step.fields) {
+        const raw = parsed[f.name];
+        if (raw === null || raw === undefined) continue;
+        if (f.type === "number") {
+          const n = typeof raw === "number" ? raw : Number(raw);
+          if (!Number.isNaN(n)) out[f.name] = n;
+        } else if (f.type === "boolean") {
+          out[f.name] = raw === true || raw === "true" || raw === 1;
+        } else {
+          out[f.name] = String(raw);
+        }
+      }
+      return out;
+    }
+
     case "branch": {
       const result = evaluateBranch(step, ctx);
       // Execute the sub-steps sequentially; bubble failures.

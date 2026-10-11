@@ -104,13 +104,13 @@ export async function executeRun(runId: string): Promise<void> {
   const admin = createAdminClient();
   const { data: run, error: rErr } = await admin
     .from("automation_runs")
-    .select("id, status, current_step, automation_id, conversation_id, contact_id")
+    .select("id, status, current_step, automation_id, conversation_id, contact_id, trigger_data")
     .eq("id", runId)
     .maybeSingle();
   if (rErr || !run) return;
   if (run.status !== "pending") return;
 
-  const ctx = await loadContext(run.automation_id, run.conversation_id, run.contact_id);
+  const ctx = await loadContext(run.automation_id, run.conversation_id, run.contact_id, (run.trigger_data ?? {}) as Record<string, unknown>);
   if (!ctx) {
     await markFailed(runId, "Could not load run context");
     return;
@@ -128,7 +128,8 @@ export async function executeRun(runId: string): Promise<void> {
       const output = await runStep(step, ctx);
       // ponytail: webhook steps can stash their response (and any
       // extracted fields) into ctx.vars so later steps can reference
-      // them via {{vars.X}} or {{vars.X.Y}}.
+      // them via {{vars.X}} or {{vars.X.Y}}. Same for ai_extract —
+      // its returned object lands at the top of vars.
       if (step.type === "webhook" && output && typeof output === "object") {
         const o = output as { body?: unknown; status?: number };
         const saveAs = (step as { saveAs?: string }).saveAs ?? "response";
@@ -136,6 +137,10 @@ export async function executeRun(runId: string): Promise<void> {
         for (const ef of (step as { extractFields?: Array<{ name: string; path: string }> }).extractFields ?? []) {
           const v = getPath(o.body, ef.path);
           if (v !== undefined) ctx.vars[ef.name] = v;
+        }
+      } else if (step.type === "ai_extract" && output && typeof output === "object") {
+        for (const [k, v] of Object.entries(output as Record<string, unknown>)) {
+          ctx.vars[k] = v;
         }
       }
       await appendLog(runId, {
@@ -185,6 +190,7 @@ async function loadContext(
   automationId: string,
   conversationId: string | null,
   contactId: string | null,
+  triggerData: Record<string, unknown> = {},
 ): Promise<RunContext | null> {
   const admin = createAdminClient();
   const { data: auto } = await admin
@@ -245,8 +251,14 @@ async function loadContext(
       externalId: channelInfo.external_id,
       accessToken: decryptChannelToken(channelInfo.access_token_enc),
     },
-    triggerData: {},
-    vars: {},
+    triggerData,
+    // ponytail: expose the original message text at the top of vars so
+    // ai_extract can read it via {{vars.messageText}} (also accessed
+    // directly in steps.ts as a fallback).
+    vars: {
+      messageText: triggerData.messageText ?? "",
+      messageId: triggerData.messageId ?? "",
+    },
   };
 }
 

@@ -39,6 +39,20 @@ const StepSchema: z.ZodType<unknown> = z.lazy(() =>
     }),
     z.object({ type: z.literal("ai_reply"), agentId: z.string().max(100), handoffMessage: z.string().max(4096).optional() }),
     z.object({
+      type: z.literal("ai_extract"),
+      agentId: z.string().max(100),
+      instruction: z.string().min(1).max(4000),
+      fields: z
+        .array(
+          z.object({
+            name: z.string().min(1).max(100),
+            type: z.enum(["string", "number", "boolean"]),
+          }),
+        )
+        .min(1)
+        .max(20),
+    }),
+    z.object({
       type: z.literal("branch"),
       if: z.object({
         field: z.enum(["tag", "channel", "status"]),

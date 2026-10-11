@@ -57,6 +57,16 @@ export type Step =
       handoffMessage?: string;
     }
   | {
+      // ponytail: extract structured data from a message into named vars.
+      // The LLM is told the field schema and returns a JSON object. Each
+      // field lands at vars.<name> so subsequent webhook steps can use
+      // {{vars.marca}}, {{vars.modelo}}, etc.
+      type: "ai_extract";
+      agentId: string;
+      instruction: string; // e.g., "Extrae marca, modelo y año del vehículo"
+      fields: Array<{ name: string; type: "string" | "number" | "boolean" }>;
+    }
+  | {
       type: "branch";
       if: { field: "tag" | "channel" | "status"; operator: "has" | "equals" | "is"; value: string };
       then: Step[];

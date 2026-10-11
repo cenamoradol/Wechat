@@ -36,6 +36,7 @@ const STEP_ICONS: Record<Step["type"], React.ComponentType<{ className?: string 
   close_conversation: XCircle,
   webhook: Webhook,
   ai_reply: Sparkles,
+  ai_extract: Sparkles,
   branch: GitBranch,
 };
 
@@ -51,6 +52,7 @@ const STEP_LABELS: Record<Step["type"], string> = {
   close_conversation: "Cerrar conversación",
   webhook: "Webhook",
   ai_reply: "Respuesta IA",
+  ai_extract: "Extraer variables con IA",
   branch: "Condición",
 };
 
@@ -66,6 +68,7 @@ const STEP_DESCRIPTIONS: Record<Step["type"], string> = {
   close_conversation: "Cerrar la conversación",
   webhook: "Llamada HTTP a URL externa",
   ai_reply: "Generar respuesta con IA",
+  ai_extract: "Extraer datos estructurados del mensaje",
   branch: "Bifurcación if/else",
 };
 
@@ -397,6 +400,94 @@ function StepFields({ step, options, onChange }: { step: Step; options: Options;
         </div>
       );
 
+    case "ai_extract":
+      return (
+        <div className="space-y-2">
+          <div>
+            <Label>Agente IA</Label>
+            <Select value={step.agentId} onValueChange={(v) => onChange({ ...step, agentId: v })}>
+              <SelectTrigger><SelectValue placeholder="Selecciona agente" /></SelectTrigger>
+              <SelectContent>
+                {(options.aiAgents ?? []).length === 0 ? (
+                  <SelectItem value="__none" disabled>
+                    Crea un agente en /ai-agents primero
+                  </SelectItem>
+                ) : (
+                  options.aiAgents!.map((a) => (
+                    <SelectItem key={a.id} value={a.id}>
+                      {a.name} — <span className="text-muted-foreground">{a.provider}/{a.model}</span>
+                    </SelectItem>
+                  ))
+                )}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label>Instrucción</Label>
+            <Textarea
+              value={step.instruction}
+              onChange={(e) => onChange({ ...step, instruction: e.target.value })}
+              placeholder='Extrae la marca, modelo y año del vehículo que el cliente menciona. Usa {{vars.brands}} como vocabulario.'
+              rows={3}
+            />
+            <p className="mt-1 text-xs text-muted-foreground">
+              El LLM recibe el último mensaje del cliente (<code>{"{{vars.messageText}}"}</code>) más esta instrucción.
+            </p>
+          </div>
+          <div>
+            <Label>Campos a extraer</Label>
+            <p className="text-xs text-muted-foreground mb-1">
+              Cada campo se guarda en <code>vars.&lt;nombre&gt;</code> para usar en los siguientes steps.
+            </p>
+            {step.fields.map((f, i) => (
+              <div key={i} className="flex gap-1 mb-1">
+                <Input
+                  value={f.name}
+                  onChange={(e) => {
+                    const next = [...step.fields];
+                    next[i] = { ...f, name: e.target.value };
+                    onChange({ ...step, fields: next });
+                  }}
+                  placeholder="nombre (ej. marca)"
+                  className="flex-1"
+                />
+                <Select
+                  value={f.type}
+                  onValueChange={(v) => {
+                    const next = [...step.fields];
+                    next[i] = { ...f, type: v as "string" | "number" | "boolean" };
+                    onChange({ ...step, fields: next });
+                  }}
+                >
+                  <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="string">string</SelectItem>
+                    <SelectItem value="number">number</SelectItem>
+                    <SelectItem value="boolean">boolean</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => onChange({ ...step, fields: step.fields.filter((_, j) => j !== i) })}
+                >
+                  <X className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            ))}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => onChange({ ...step, fields: [...step.fields, { name: "", type: "string" }] })}
+            >
+              <Plus className="h-3.5 w-3.5" /> Añadir campo
+            </Button>
+          </div>
+        </div>
+      );
+
     case "branch":
       return (
         <div className="space-y-3">
@@ -653,6 +744,7 @@ export function defaultStepFor(t: Step["type"]): Step {
     case "close_conversation": return { type: "close_conversation" };
     case "webhook": return { type: "webhook", url: "", method: "POST" };
     case "ai_reply": return { type: "ai_reply", agentId: "" };
+    case "ai_extract": return { type: "ai_extract", agentId: "", instruction: "", fields: [] };
     case "branch": return { type: "branch", if: { field: "channel", operator: "is", value: "whatsapp" }, then: [] };
   }
 }
@@ -680,6 +772,13 @@ export function validateStep(s: Step): string | null {
       return null;
     case "ai_reply":
       return s.agentId ? null : "agentId requerido";
+    case "ai_extract": {
+      if (!s.agentId) return "agente requerido";
+      if (!s.instruction.trim()) return "instrucción requerida";
+      if (s.fields.length === 0) return "al menos un campo a extraer";
+      if (s.fields.some((f) => !f.name.trim())) return "todos los campos necesitan nombre";
+      return null;
+    }
     case "branch":
       return s.if.value ? null : "valor de condición requerido";
     case "set_status":
