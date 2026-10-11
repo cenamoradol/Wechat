@@ -32,6 +32,8 @@ export type Database = {
           logo_url: string | null;
           default_currency: string;
           onboarding_step: number;
+          storage_limit_bytes: number;
+          storage_unlimited: boolean;
           created_at: string;
           updated_at: string;
         };
@@ -41,6 +43,8 @@ export type Database = {
           logo_url?: string | null;
           default_currency?: string;
           onboarding_step?: number;
+          storage_limit_bytes?: number;
+          storage_unlimited?: boolean;
         };
         Update: {
           name?: string;
@@ -48,6 +52,8 @@ export type Database = {
           logo_url?: string | null;
           default_currency?: string;
           onboarding_step?: number;
+          storage_limit_bytes?: number;
+          storage_unlimited?: boolean;
         };
         Relationships: [];
       };
@@ -278,6 +284,11 @@ export type Database = {
           text: string | null;
           media_url: string | null;
           media_mime: string | null;
+          media_filename: string | null;
+          media_size_bytes: number | null;
+          media_duration_seconds: number | null;
+          media_thumbnail_url: string | null;
+          media_meta_id: string | null;
           template_id: string | null;
           template_vars: Record<string, unknown> | null;
           reactions: unknown[];
@@ -287,6 +298,7 @@ export type Database = {
           raw_payload: Record<string, unknown> | null;
           sent_by: string | null;
           read_at: string | null;
+          deleted_at: string | null;
           created_at: string;
         };
         Insert: {
@@ -297,6 +309,11 @@ export type Database = {
           text?: string | null;
           media_url?: string | null;
           media_mime?: string | null;
+          media_filename?: string | null;
+          media_size_bytes?: number | null;
+          media_duration_seconds?: number | null;
+          media_thumbnail_url?: string | null;
+          media_meta_id?: string | null;
           template_id?: string | null;
           template_vars?: Record<string, unknown> | null;
           reactions?: unknown[];
@@ -305,12 +322,17 @@ export type Database = {
           error_message?: string | null;
           raw_payload?: Record<string, unknown> | null;
           sent_by?: string | null;
+          deleted_at?: string | null;
         };
         Update: Partial<{
           status: string;
           error_code: string | null;
           error_message: string | null;
           read_at: string | null;
+          media_url: string | null;
+          media_meta_id: string | null;
+          text: string | null;
+          deleted_at: string | null;
           sent_by: string | null;
         }>;
         Relationships: [

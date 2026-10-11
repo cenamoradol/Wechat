@@ -132,3 +132,55 @@ export async function getWorkspaceStorageUsage(workspaceId: string): Promise<num
   }
   return total;
 }
+
+/**
+ * Get the per-workspace storage quota (limit + unlimited flag).
+ * Reads from the workspaces table.
+ */
+export async function getWorkspaceStorageQuota(
+  workspaceId: string,
+): Promise<{ usage: number; limit: number; unlimited: boolean; wouldExceed: boolean }> {
+  const admin = getAdminClient();
+  const [wsResult, usage] = await Promise.all([
+    admin.from("workspaces").select("storage_limit_bytes, storage_unlimited").eq("id", workspaceId).maybeSingle(),
+    getWorkspaceStorageUsage(workspaceId),
+  ]);
+
+  const ws = (wsResult as unknown as { storage_limit_bytes: number | null; storage_unlimited: boolean | null } | null);
+  const unlimited = ws?.storage_unlimited ?? false;
+  const limit = unlimited ? Number.MAX_SAFE_INTEGER : (ws?.storage_limit_bytes ?? 1073741824);
+
+  return {
+    usage,
+    limit,
+    unlimited,
+    wouldExceed: !unlimited && usage >= limit,
+  };
+}
+
+/**
+ * Upload a media file to Supabase Storage under the workspace folder.
+ * Returns the public URL and any error.
+ */
+export async function uploadMediaFile(
+  workspaceId: string,
+  conversationId: string,
+  file: File | Blob,
+  fileName: string,
+): Promise<{ url?: string; error?: string }> {
+  try {
+    const admin = getAdminClient();
+    const path = `${workspaceId}/messages/${conversationId}/${Date.now()}-${fileName.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+    const { error } = await admin.storage
+      .from(MEDIA_BUCKET)
+      .upload(path, file, { upsert: false, contentType: file.type });
+    if (error) return { error: `Storage upload failed: ${error.message}` };
+    // Get the public URL (works because the RLS allows read within workspace)
+    const { data: urlData } = admin.storage
+      .from(MEDIA_BUCKET)
+      .getPublicUrl(path);
+    return { url: urlData.publicUrl };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Unknown error" };
+  }
+}

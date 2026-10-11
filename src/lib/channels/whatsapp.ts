@@ -88,6 +88,51 @@ export const whatsappAdapter: ChannelAdapter = {
     return { externalId: res.messages[0].id };
   },
 
+  async sendMedia(args: SendMediaArgs): Promise<{ externalId: string; metaMediaId: string }> {
+    if (!args.file) {
+      throw new Error("WhatsApp sendMedia requires `file` (multipart upload). Messenger/IG use `mediaUrl`.");
+    }
+
+    // Step 1: upload the file to Meta to get a media_id
+    const form = new FormData();
+    form.append("messaging_product", "whatsapp");
+    form.append("type", args.mediaType);
+    form.append("file", args.file);
+
+    const uploadRes = await fetch(
+      `https://graph.facebook.com/v22.0/${args.fromExternalId}/media`,
+      {
+        method: "POST",
+        headers: { Authorization: `Bearer ${args.accessToken}` },
+        body: form,
+        cache: "no-store",
+      },
+    );
+    if (!uploadRes.ok) {
+      const err = await uploadRes.text();
+      throw new Error(`WhatsApp media upload failed (${uploadRes.status}): ${err.slice(0, 200)}`);
+    }
+    const { id: metaMediaId } = (await uploadRes.json()) as { id: string };
+
+    // Step 2: send the message with the media_id
+    const mediaPayload: Record<string, unknown> = { id: metaMediaId };
+    if (args.caption) mediaPayload.caption = args.caption;
+    if (args.filename) mediaPayload.filename = args.filename;
+
+    const sendRes = await graphPost<{ messages: Array<{ id: string }> }>(
+      `/${args.fromExternalId}/messages`,
+      args.accessToken,
+      {
+        messaging_product: "whatsapp",
+        recipient_type: "individual",
+        to: args.toExternalId,
+        type: args.mediaType, // "image" | "video" | "audio" | "document"
+        [args.mediaType]: mediaPayload,
+      },
+    );
+    return { externalId: sendRes.messages[0].id, metaMediaId };
+  },
+
   async sendTemplate(args: SendTemplateArgs) {
     const res = await graphPost<{ messages: Array<{ id: string }> }>(
       `/${args.fromExternalId}/messages`,
@@ -108,26 +153,6 @@ export const whatsappAdapter: ChannelAdapter = {
               })),
             },
           ],
-        },
-      },
-    );
-    return { externalId: res.messages[0].id };
-  },
-
-  async sendMedia(args: SendMediaArgs) {
-    const waMediaType = (["image", "video", "audio", "document"].includes(args.mediaType)
-      ? args.mediaType
-      : "document") as "image" | "video" | "audio" | "document";
-    const res = await graphPost<{ messages: Array<{ id: string }> }>(
-      `/${args.fromExternalId}/messages`,
-      args.accessToken,
-      {
-        messaging_product: "whatsapp",
-        to: args.toExternalId,
-        type: waMediaType,
-        [waMediaType]: {
-          link: args.mediaUrl,
-          ...(args.caption ? { caption: args.caption } : {}),
         },
       },
     );

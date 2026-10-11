@@ -44,9 +44,20 @@ export type SendTemplateArgs = SendTextArgs & {
 };
 
 export type SendMediaArgs = SendTextArgs & {
-  mediaUrl: string;
-  mediaType: string;
+  /**
+   * Public URL of the media file (used by Messenger/IG attachment API).
+   * For WhatsApp, prefer passing `file` directly via multipart upload.
+   */
+  mediaUrl?: string;
+  /**
+   * Raw file blob (used by WhatsApp multipart upload).
+   * If `file` is provided, WhatsApp uploads it directly.
+   */
+  file?: File | Blob;
+  mediaType: "image" | "video" | "audio" | "document";
   caption?: string;
+  /** For documents, the original filename. */
+  filename?: string;
 };
 
 export type ContactProfile = {
@@ -60,7 +71,7 @@ export interface ChannelAdapter {
   parseInbound(payload: unknown): NormalizedMessage[];
   sendText(args: SendTextArgs): Promise<{ externalId: string }>;
   sendTemplate(args: SendTemplateArgs): Promise<{ externalId: string }>;
-  sendMedia(args: SendMediaArgs): Promise<{ externalId: string }>;
+  sendMedia(args: SendMediaArgs): Promise<{ externalId: string; metaMediaId?: string }>;
   fetchContactProfile(args: { accessToken: string; externalUserId: string }): Promise<ContactProfile>;
   fetchTemplates(args: { accessToken: string; externalId: string }): Promise<Template[]>;
 }

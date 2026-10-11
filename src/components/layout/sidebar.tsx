@@ -16,6 +16,7 @@ const nav = [
   { href: "/inbox", label: "Inbox", icon: Inbox },
   { href: "/contacts", label: "Contactos", icon: Contact },
   { href: "/team", label: "Equipo", icon: Users },
+  { href: "/settings/workspace", label: "Workspace", icon: Settings },
   { href: "/settings", label: "Configuración", icon: Settings },
 ];
 

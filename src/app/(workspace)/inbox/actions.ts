@@ -8,6 +8,7 @@ import { decrypt } from "@/lib/crypto";
 import { getAdapter } from "@/lib/channels";
 import { deleteConversationMedia } from "@/lib/supabase/storage";
 import { getActiveWorkspaceIdAction } from "@/app/(workspace)/actions";
+import { getWorkspaceStorageQuota, uploadMediaFile } from "@/lib/supabase/storage";
 
 const Schema = z.object({
   conversationId: z.string().min(1),
@@ -142,6 +143,202 @@ export async function sendMessageAction(
   revalidatePath("/inbox");
   revalidatePath(`/inbox/${parsed.data.conversationId}`);
   return { ok: true, messageId: msg?.id };
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Send a media reply (image, video, audio, document)
+// ──────────────────────────────────────────────────────────────────
+
+const MediaSchema = z.object({
+  conversationId: z.string().min(1),
+  /**
+   * Base64 data URL of the file. The action decodes and uploads to
+   * Supabase Storage, then dispatches via the channel adapter.
+   * Format: data:<mime>;base64,<data>
+   */
+  fileDataUrl: z.string().min(1),
+  fileName: z.string().min(1).max(255),
+  mimeType: z.string().min(1).max(100),
+  caption: z.string().max(4096).optional(),
+});
+
+export type SendMediaResult = { error?: string; ok?: boolean; messageId?: string };
+
+export async function sendMediaMessageAction(
+  input: z.infer<typeof MediaSchema>,
+): Promise<SendMediaResult> {
+  const parsed = MediaSchema.safeParse(input);
+  if (!parsed.success) return { error: "Datos inválidos" };
+
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Unauthorized" };
+
+  const admin = createAdminClient();
+
+  // 1. Decode the data URL
+  const m = parsed.data.fileDataUrl.match(/^data:([^;]+);base64,(.+)$/);
+  if (!m) return { error: "Archivo inválido" };
+  const mimeType = m[1];
+  const bytes = Buffer.from(m[2], "base64");
+  const file = new Blob([bytes], { type: mimeType });
+
+  // 2. Look up conversation + channel
+  const ctx = await getChannelContext(admin, parsed.data.conversationId);
+  if ("error" in ctx) return { error: ctx.error };
+
+  // 3. Check storage quota
+  const quota = await getWorkspaceStorageQuota(ctx.workspaceId);
+  if (quota.wouldExceed) {
+    return {
+      error: `Workspace sin espacio (${formatBytes(quota.usage)} / ${formatBytes(quota.limit)}). Borra archivos o sube el límite en Configuración.`,
+    };
+  }
+
+  // 4. Map mime → Meta media type
+  const mediaType = mimeToMetaType(mimeType);
+  if (!mediaType) {
+    return { error: `Tipo de archivo no soportado: ${mimeType}` };
+  }
+
+  // 5. Upload to Supabase Storage
+  const { url: storageUrl, error: upErr } = await uploadMediaFile(
+    ctx.workspaceId,
+    parsed.data.conversationId,
+    file,
+    parsed.data.fileName,
+  );
+  if (upErr || !storageUrl) return { error: upErr ?? "No se pudo subir el archivo" };
+
+  // 6. Send via the channel adapter
+  const adapter = getAdapter(ctx.channelType);
+  let sendResult: { externalId: string; metaMediaId?: string };
+  try {
+    sendResult = await adapter.sendMedia({
+      accessToken: ctx.token,
+      fromExternalId: ctx.channelFromId,
+      toExternalId: ctx.contactExternalId,
+      // For WhatsApp, use the raw file. For FB/IG, use the public URL.
+      text: parsed.data.caption ?? "", // SendMediaArgs extends SendTextArgs which requires text
+      file: ctx.channelType === "whatsapp" ? file : undefined,
+      mediaUrl: ctx.channelType !== "whatsapp" ? storageUrl : undefined,
+      mediaType,
+      caption: parsed.data.caption,
+      filename: parsed.data.fileName,
+    });
+  } catch (e) {
+    console.error("sendMedia error", e);
+    return { error: `Error al enviar: ${(e as Error).message}` };
+  }
+
+  // 7. Persist the outbound message
+  const { data: msg, error: msgErr } = await admin
+    .from("messages")
+    .insert({
+      conversation_id: parsed.data.conversationId,
+      external_id: sendResult.externalId,
+      direction: "out",
+      type: mediaType,
+      text: parsed.data.caption ?? null,
+      media_url: storageUrl,
+      media_mime: mimeType,
+      media_filename: parsed.data.fileName,
+      media_size_bytes: bytes.byteLength,
+      media_meta_id: sendResult.metaMediaId ?? null,
+      sent_by: user.id,
+      status: "sent",
+    })
+    .select("id")
+    .single();
+  if (msgErr) return { error: `Enviado a Meta pero no se pudo guardar: ${msgErr.message}` };
+
+  // 8. Update conversation preview
+  await admin
+    .from("conversations")
+    .update({
+      last_message_at: new Date().toISOString(),
+      last_message_preview: parsed.data.caption
+        ? `📎 ${parsed.data.caption.slice(0, 100)}`
+        : `📎 ${parsed.data.fileName}`,
+    })
+    .eq("id", parsed.data.conversationId);
+
+  revalidatePath("/inbox");
+  revalidatePath(`/inbox/${parsed.data.conversationId}`);
+  return { ok: true, messageId: msg.id };
+}
+
+// Helper: get conversation + channel + token
+async function getChannelContext(
+  admin: ReturnType<typeof createAdminClient>,
+  conversationId: string,
+): Promise<
+  | { error: string }
+  | {
+      workspaceId: string;
+      channelType: "whatsapp" | "facebook" | "instagram";
+      channelFromId: string;
+      contactExternalId: string;
+      token: string;
+    }
+> {
+  const { data: conv } = await admin
+    .from("conversations")
+    .select("id, workspace_id, contact_channel_id")
+    .eq("id", conversationId)
+    .maybeSingle();
+  if (!conv) return { error: "Conversación no encontrada" };
+
+  const { data: cc } = await admin
+    .from("contact_channels")
+    .select(
+      "id, channel_id, external_user_id, channels(id, type, external_id, access_token_enc)",
+    )
+    .eq("id", (conv as any).contact_channel_id)
+    .maybeSingle();
+  if (!cc) return { error: "Canal no encontrado" };
+
+  const ch = (cc as any).channels;
+  if (!ch) return { error: "Canal no encontrado" };
+
+  let token: string;
+  try {
+    token = decrypt(Buffer.from(ch.access_token_enc, "base64"));
+  } catch {
+    return { error: "No se pudo descifrar el token del canal" };
+  }
+
+  return {
+    workspaceId: (conv as any).workspace_id,
+    channelType: ch.type,
+    channelFromId: ch.external_id,
+    contactExternalId: (cc as any).external_user_id,
+    token,
+  };
+}
+
+function mimeToMetaType(mime: string): "image" | "video" | "audio" | "document" | null {
+  if (mime.startsWith("image/")) return "image";
+  if (mime.startsWith("video/")) return "video";
+  if (mime.startsWith("audio/")) return "audio";
+  if (
+    mime === "application/pdf" ||
+    mime.includes("msword") ||
+    mime.includes("officedocument") ||
+    mime.includes("ms-excel") ||
+    mime.includes("spreadsheetml") ||
+    mime === "text/plain"
+  ) {
+    return "document";
+  }
+  return null;
+}
+
+function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  if (n < 1024 * 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} MB`;
+  return `${(n / 1024 / 1024 / 1024).toFixed(2)} GB`;
 }
 
 export async function markAsReadAction(conversationId: string): Promise<void> {
