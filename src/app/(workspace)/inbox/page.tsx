@@ -153,8 +153,9 @@ async function ActiveThread({
 
   const { data: messages, error: msgErr } = await adminSupabase
     .from("messages")
-    .select("id, direction, type, text, status, created_at, sent_by, read_at, external_id, media_url, media_mime, media_filename, media_size_bytes, profiles:profiles!messages_sent_by_fkey(full_name, email)")
+    .select("id, direction, type, text, status, created_at, sent_by, read_at, external_id, media_url, media_mime, media_filename, media_size_bytes, deleted_at, profiles:profiles!messages_sent_by_fkey(full_name, email)")
     .eq("conversation_id", conversationId)
+    .is("deleted_at", null)
     .order("created_at", { ascending: true })
     .limit(200);
 

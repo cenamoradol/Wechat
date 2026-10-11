@@ -21,6 +21,7 @@ type Message = {
   media_mime?: string | null;
   media_filename?: string | null;
   media_size_bytes?: number | null;
+  deleted_at?: string | null;
   // Profile of the agent who sent the message (only present for outbound)
   profiles?: { full_name: string | null; email: string | null } | null;
 };
@@ -144,6 +145,7 @@ function dedupeAndMerge(prev: Message[], incoming: Message[]): Message[] {
   const map = new Map<string, Message>();
   for (const m of prev) map.set(m.id, m);
   for (const m of incoming) {
+    if (m.deleted_at) continue; // ponytail: hide soft-deleted
     if (!map.has(m.id)) map.set(m.id, m);
   }
   return [...map.values()].sort(
@@ -158,14 +160,16 @@ export function MessagesList({
   conversationId: string;
   initialMessages: Message[];
 }) {
-  const [messages, setMessages] = useState<Message[]>(initialMessages);
+  const [messages, setMessages] = useState<Message[]>(
+    initialMessages.filter((m) => !m.deleted_at),
+  );
   const [liveMode, setLiveMode] = useState<"realtime" | "polling" | "off">("realtime");
   const scrollRef = useRef<HTMLDivElement>(null);
   const markedRef = useRef<string | null>(null);
 
   // Reset messages + scroll when active conversation changes
   useEffect(() => {
-    setMessages(initialMessages);
+    setMessages(initialMessages.filter((m) => !m.deleted_at));
     markedRef.current = conversationId;
     requestAnimationFrame(() => {
       const el = scrollRef.current;
@@ -270,6 +274,10 @@ export function MessagesList({
           }
 
           setMessages((prev) => {
+            if (next.deleted_at) {
+              // ponytail: hide soft-deleted messages
+              return prev.filter((m) => m.id !== next.id);
+            }
             const idx = prev.findIndex((m) => m.id === next.id);
             if (idx === -1) return dedupeAndMerge(prev, [next]);
             const copy = prev.slice();

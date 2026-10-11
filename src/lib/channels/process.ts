@@ -1,5 +1,7 @@
 import type { NormalizedMessage } from "@/lib/channels/types";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { decrypt } from "@/lib/crypto";
+import { downloadAndStoreMedia } from "@/lib/channels/download";
 
 // Process inbound: upsert contact + contact_channel + conversation + insert message
 // All writes use service_role (admin) to bypass RLS — webhooks have no user session.
@@ -9,7 +11,7 @@ export async function processInbound(m: NormalizedMessage): Promise<void> {
   // 1. Identify channel
   const { data: channel, error: chErr } = await admin
     .from("channels")
-    .select("id, workspace_id")
+    .select("id, workspace_id, access_token_enc")
     .eq("type", m.channelType)
     .eq("external_id", m.channelExternalId)
     .maybeSingle();
@@ -134,15 +136,51 @@ export async function processInbound(m: NormalizedMessage): Promise<void> {
       .eq("id", conv.id);
   }
 
-  // 5. Upsert message (idempotent on (conversation_id, external_id))
+  // 5. If the message has media, download from Meta and store in our
+  //    Supabase Storage bucket. The Meta CDN URL expires in 5 min for
+  //    WhatsApp; downloading immediately makes the media durable.
+  let mediaUrl: string | null = m.mediaUrl ?? null;
+  let mediaMime: string | null = m.mediaMime ?? null;
+  let mediaFilename: string | null = null;
+  let mediaSize: number | null = null;
+  if (mediaUrl) {
+    try {
+      const accessToken = channel.access_token_enc
+        ? decrypt(Buffer.from(channel.access_token_enc as string, "base64"))
+        : "";
+      const stored = await downloadAndStoreMedia({
+        channelType: m.channelType,
+        accessToken,
+        workspaceId: channel.workspace_id,
+        conversationId: conv.id,
+        mediaUrl,
+        mimeType: mediaMime,
+        originalFilename: m.type === "document" ? m.text ?? undefined : undefined,
+      });
+      if (stored) {
+        mediaUrl = stored.storageUrl;
+        mediaMime = stored.mimeType;
+        mediaFilename = stored.filename;
+        mediaSize = stored.sizeBytes;
+      }
+    } catch (e) {
+      console.error("inbound media download failed", e);
+      // Fall back to the original (transient) URL — UI will show the
+      // "Media no disponible" placeholder once the URL expires.
+    }
+  }
+
+  // 6. Upsert message (idempotent on (conversation_id, external_id))
   const { error: msgErr } = await admin.from("messages").upsert({
     conversation_id: conv.id,
     external_id: m.messageExternalId,
     direction: "in",
     type: m.type,
     text: m.text ?? null,
-    media_url: m.mediaUrl ?? null,
-    media_mime: m.mediaMime ?? null,
+    media_url: mediaUrl,
+    media_mime: mediaMime,
+    media_filename: mediaFilename,
+    media_size_bytes: mediaSize,
     raw_payload: m.raw as unknown as Record<string, unknown>,
     status: "delivered",
   }, { onConflict: "conversation_id,external_id" });

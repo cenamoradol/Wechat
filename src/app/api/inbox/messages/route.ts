@@ -22,8 +22,9 @@ export async function POST(req: NextRequest) {
 
   let query = supabase
     .from("messages")
-    .select("id, direction, type, text, status, created_at, external_id, read_at, sent_by, media_url, media_mime, media_filename, media_size_bytes, profiles:profiles!messages_sent_by_fkey(full_name, email)")
+    .select("id, direction, type, text, status, created_at, external_id, read_at, sent_by, media_url, media_mime, media_filename, media_size_bytes, deleted_at, profiles:profiles!messages_sent_by_fkey(full_name, email)")
     .eq("conversation_id", conversationId)
+    .is("deleted_at", null)
     .order("created_at", { ascending: true })
     .limit(200);
   if (sinceISO) {
