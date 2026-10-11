@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
-import { Paperclip, X, ImageIcon, Film, FileText, Music, Upload } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Paperclip, X, ImageIcon, Film, FileText, Music, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -11,13 +11,11 @@ const MAX_FILE_BYTES = 16 * 1024 * 1024; // 16 MB (WhatsApp hard limit)
 export type UploadedFile = {
   id: string;
   file: File;
-  dataUrl: string;
+  dataUrl: string; // populated on demand
   mimeType: string;
   fileName: string;
   sizeBytes: number;
-  /** Object URL for local preview (revoked on unmount) */
   previewUrl: string;
-  /** Detected media type for Meta */
   mediaType: "image" | "video" | "audio" | "document";
 };
 
@@ -49,18 +47,78 @@ function readAsDataUrl(file: File): Promise<string> {
 
 let fileIdCounter = 0;
 
-export function MediaUpload({
-  onFilesAdded,
-  compact = false,
+/**
+ * Read dataUrl for a file, lazy-encoding. Returns the dataUrl string.
+ * Used right before sending so we don't have stale dataUrl in state.
+ */
+export async function ensureDataUrl(f: UploadedFile): Promise<string> {
+  if (f.dataUrl) return f.dataUrl;
+  const url = await readAsDataUrl(f.file);
+  // Mutate to cache (same reference is in state)
+  f.dataUrl = url;
+  return url;
+}
+
+let _dragCounter = 0;
+
+/**
+ * Wraps the ReplyBox area and provides a large drop zone. Renders the
+ * paperclip button that opens the file picker. Calls onFiles when files
+ * are added (from picker, drag, paste, or voice).
+ */
+export function MediaDropZone({
+  onFiles,
+  children,
+  isDragging,
+  setIsDragging,
 }: {
-  onFilesAdded: (files: UploadedFile[]) => void;
-  compact?: boolean;
+  onFiles: (files: File[]) => void;
+  children: React.ReactNode;
+  isDragging: boolean;
+  setIsDragging: (b: boolean) => void;
 }) {
-  const [isDragging, setIsDragging] = useState(false);
+  return (
+    <div
+      onDragEnter={(e) => {
+        e.preventDefault();
+        _dragCounter++;
+        if (e.dataTransfer.types.includes("Files")) setIsDragging(true);
+      }}
+      onDragOver={(e) => {
+        e.preventDefault();
+      }}
+      onDragLeave={(e) => {
+        e.preventDefault();
+        _dragCounter--;
+        if (_dragCounter <= 0) {
+          _dragCounter = 0;
+          setIsDragging(false);
+        }
+      }}
+      onDrop={(e) => {
+        e.preventDefault();
+        _dragCounter = 0;
+        setIsDragging(false);
+        if (e.dataTransfer.files.length > 0) onFiles(Array.from(e.dataTransfer.files));
+      }}
+      className={cn("relative", isDragging && "ring-2 ring-primary ring-offset-2 ring-offset-background rounded-md")}
+    >
+      {children}
+    </div>
+  );
+}
+
+export function MediaUploadButton({
+  onFilesAdded,
+  isDisabled,
+}: {
+  onFilesAdded: (files: File[]) => void;
+  isDisabled?: boolean;
+}) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleFiles = async (rawFiles: FileList | File[]) => {
-    const newFiles: UploadedFile[] = [];
+  const handleFiles = (rawFiles: FileList | File[]) => {
+    const valid: File[] = [];
     for (const file of Array.from(rawFiles)) {
       const mediaType = detectMediaType(file.type);
       if (!mediaType) {
@@ -71,44 +129,13 @@ export function MediaUpload({
         toast.error(`${file.name} excede 16 MB`);
         continue;
       }
-      try {
-        const dataUrl = await readAsDataUrl(file);
-        newFiles.push({
-          id: `f-${++fileIdCounter}`,
-          file,
-          dataUrl,
-          mimeType: file.type,
-          fileName: file.name,
-          sizeBytes: file.size,
-          previewUrl: URL.createObjectURL(file),
-          mediaType,
-        });
-      } catch (e) {
-        toast.error(`Error leyendo ${file.name}`);
-      }
+      valid.push(file);
     }
-    if (newFiles.length > 0) onFilesAdded(newFiles);
+    if (valid.length > 0) onFilesAdded(valid);
   };
 
   return (
-    <div
-      onDragOver={(e) => {
-        e.preventDefault();
-        setIsDragging(true);
-      }}
-      onDragLeave={(e) => {
-        if (e.currentTarget === e.target) setIsDragging(false);
-      }}
-      onDrop={(e) => {
-        e.preventDefault();
-        setIsDragging(false);
-        if (e.dataTransfer.files.length > 0) handleFiles(e.dataTransfer.files);
-      }}
-      className={cn(
-        "relative",
-        isDragging && "ring-2 ring-primary",
-      )}
-    >
+    <>
       <input
         ref={fileInputRef}
         type="file"
@@ -117,7 +144,6 @@ export function MediaUpload({
         className="hidden"
         onChange={(e) => {
           if (e.target.files) handleFiles(e.target.files);
-          // Reset so the same file can be picked again
           e.target.value = "";
         }}
       />
@@ -127,15 +153,14 @@ export function MediaUpload({
         size="icon"
         title="Adjuntar archivo"
         onClick={() => fileInputRef.current?.click()}
-        className={cn(compact && "h-8 w-8")}
+        disabled={isDisabled}
       >
         <Paperclip className="h-4 w-4" />
       </Button>
-    </div>
+    </>
   );
 }
 
-/** Compact preview row for already-attached files, with X to remove. */
 export function MediaPreviewList({
   files,
   onRemove,
@@ -152,7 +177,6 @@ export function MediaPreviewList({
   captions?: Record<string, string>;
 }) {
   useEffect(() => {
-    // Revoke object URLs on unmount
     return () => {
       files.forEach((f) => URL.revokeObjectURL(f.previewUrl));
     };

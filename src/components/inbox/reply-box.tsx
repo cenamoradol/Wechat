@@ -2,12 +2,18 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Send, Loader2, Mic, X } from "lucide-react";
+import { Send, Loader2, Mic } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { sendMessageAction, sendMediaMessageAction } from "@/app/(workspace)/inbox/actions";
-import { MediaUpload, MediaPreviewList, type UploadedFile } from "./media/media-upload";
+import {
+  MediaDropZone,
+  MediaPreviewList,
+  MediaUploadButton,
+  ensureDataUrl,
+  type UploadedFile,
+} from "./media/media-upload";
 import { VoiceRecorder } from "./media/voice-recorder";
 import { cn } from "@/lib/utils";
 
@@ -17,6 +23,7 @@ export function ReplyBox({ conversationId }: { conversationId: string }) {
   const [files, setFiles] = useState<UploadedFile[]>([]);
   const [captions, setCaptions] = useState<Record<string, string>>({});
   const [showRecorder, setShowRecorder] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
   const [isPending, startTransition] = useTransition();
   const ref = useRef<HTMLTextAreaElement>(null);
 
@@ -24,45 +31,53 @@ export function ReplyBox({ conversationId }: { conversationId: string }) {
     ref.current?.focus();
   }, [conversationId]);
 
-  const onFilesAdded = (newFiles: UploadedFile[]) => {
+  // Cleanup object URLs on unmount
+  useEffect(() => {
+    return () => {
+      files.forEach((f) => URL.revokeObjectURL(f.previewUrl));
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const addFiles = (rawFiles: File[]) => {
+    const newFiles: UploadedFile[] = rawFiles.map((f) => {
+      const mediaType = (f.type.startsWith("image/")
+        ? "image"
+        : f.type.startsWith("video/")
+        ? "video"
+        : f.type.startsWith("audio/")
+        ? "audio"
+        : "document") as UploadedFile["mediaType"];
+      return {
+        id: `f-${++fileIdCounter}-${Date.now()}`,
+        file: f,
+        dataUrl: "",
+        mimeType: f.type,
+        fileName: f.name,
+        sizeBytes: f.size,
+        previewUrl: URL.createObjectURL(f),
+        mediaType,
+      };
+    });
     setFiles((prev) => [...prev, ...newFiles]);
-    setShowRecorder(false); // Hide recorder if files are added
+    setShowRecorder(false);
   };
 
   const onVoiceRecorded = (file: File) => {
-    // Synthesize an UploadedFile from the recorded blob
-    const previewUrl = URL.createObjectURL(file);
-    const id = `vr-${Date.now()}`;
-    const uploaded: UploadedFile = {
-      id,
-      file,
-      dataUrl: "", // Filled lazily on submit
-      mimeType: file.type,
-      fileName: file.name,
-      sizeBytes: file.size,
-      previewUrl,
-      mediaType: "audio",
-    };
-    // Read the data URL in advance
-    const reader = new FileReader();
-    reader.onload = () => {
-      uploaded.dataUrl = reader.result as string;
-      setFiles((prev) => [...prev, uploaded]);
-    };
-    reader.readAsDataURL(file);
+    addFiles([file]);
     setShowRecorder(false);
   };
 
   const onRemoveFile = (id: string) => {
-    setFiles((prev) => prev.filter((f) => f.id !== id));
+    setFiles((prev) => {
+      const found = prev.find((f) => f.id === id);
+      if (found) URL.revokeObjectURL(found.previewUrl);
+      return prev.filter((f) => f.id !== id);
+    });
     setCaptions((prev) => {
       const { [id]: _removed, ...rest } = prev;
       return rest;
     });
-  };
-
-  const onCancel = () => {
-    setShowRecorder(false);
   };
 
   const send = async () => {
@@ -72,30 +87,36 @@ export function ReplyBox({ conversationId }: { conversationId: string }) {
     if (!hasText && !hasFiles) return;
 
     startTransition(async () => {
-      // 1. Send each file first (with optional caption)
+      // 1. Send each file first (with optional caption).
+      //    dataUrl is read here so we never have a stale empty string.
       let failed = 0;
       for (const f of files) {
-        const res = await sendMediaMessageAction({
-          conversationId,
-          fileDataUrl: f.dataUrl,
-          fileName: f.fileName,
-          mimeType: f.mimeType,
-          caption: captions[f.id] || undefined,
-        });
-        if (res.error) {
+        try {
+          const dataUrl = await ensureDataUrl(f);
+          const res = await sendMediaMessageAction({
+            conversationId,
+            fileDataUrl: dataUrl,
+            fileName: f.fileName,
+            mimeType: f.mimeType,
+            caption: captions[f.id] || undefined,
+          });
+          if (res.error) {
+            failed++;
+            toast.error(`${f.fileName}: ${res.error}`);
+          }
+        } catch (e) {
           failed++;
-          toast.error(`${f.fileName}: ${res.error}`);
+          toast.error(`${f.fileName}: ${e instanceof Error ? e.message : "Error"}`);
         }
       }
-      // 2. If there's also text, send it last
+      // 2. Then send text (if any)
       if (hasText) {
         const res = await sendMessageAction({ conversationId, text: trimmedText });
-        if (res.error) {
-          toast.error(res.error);
-        }
+        if (res.error) toast.error(res.error);
       }
       if (failed === 0) {
         setText("");
+        files.forEach((f) => URL.revokeObjectURL(f.previewUrl));
         setFiles([]);
         setCaptions({});
         setShowRecorder(false);
@@ -104,7 +125,7 @@ export function ReplyBox({ conversationId }: { conversationId: string }) {
     });
   };
 
-  const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+  const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>): void => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       send();
@@ -123,97 +144,82 @@ export function ReplyBox({ conversationId }: { conversationId: string }) {
     }
     if (imageFiles.length === 0) return;
     e.preventDefault();
-    const dt = new DataTransfer();
-    imageFiles.forEach((f) => dt.items.add(f));
-    onFilesAdded(
-      imageFiles.map((f) => ({
-        id: `paste-${Date.now()}-${Math.random()}`,
-        file: f,
-        dataUrl: "",
-        mimeType: f.type,
-        fileName: f.name || `paste-${Date.now()}.${f.type.split("/")[1] ?? "png"}`,
-        sizeBytes: f.size,
-        previewUrl: URL.createObjectURL(f),
-        mediaType: "image" as const,
-      })),
-    );
-    // We need dataUrl; load asynchronously per file
-    imageFiles.forEach((f, idx) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        setFiles((prev) =>
-          prev.map((p) =>
-            p.id.startsWith("paste-") && p.fileName === f.name
-              ? { ...p, dataUrl: reader.result as string }
-              : p,
-          ),
-        );
-      };
-      reader.readAsDataURL(f);
-    });
+    addFiles(imageFiles);
   };
 
   const canSend = !isPending && (text.trim().length > 0 || files.length > 0);
 
   return (
-    <div className="border-t bg-background">
-      {files.length > 0 && (
-        <MediaPreviewList
-          files={files}
-          onRemove={onRemoveFile}
-          isUploading={isPending}
-          onCaptionChange={(id, cap) =>
-            setCaptions((prev) => ({ ...prev, [id]: cap }))
-          }
-          captions={captions}
-        />
-      )}
-      {showRecorder && (
-        <div className="flex items-center justify-between gap-2 border-t bg-muted/30 p-2">
-          <VoiceRecorder onRecorded={onVoiceRecorded} onCancel={onCancel} />
-          <span className="text-xs text-muted-foreground">
-            Toca ■ para detener
-          </span>
-        </div>
-      )}
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          send();
-        }}
-        className="flex items-end gap-2 p-3"
-      >
-        <MediaUpload onFilesAdded={onFilesAdded} />
-        <Button
-          type="button"
-          variant={showRecorder ? "default" : "ghost"}
-          size="icon"
-          title="Grabar nota de voz"
-          onClick={() => setShowRecorder((v) => !v)}
-          disabled={isPending}
+    <MediaDropZone
+      onFiles={addFiles}
+      isDragging={isDragging}
+      setIsDragging={setIsDragging}
+    >
+      <div className="border-t bg-background">
+        {files.length > 0 && (
+          <MediaPreviewList
+            files={files}
+            onRemove={onRemoveFile}
+            isUploading={isPending}
+            onCaptionChange={(id, cap) =>
+              setCaptions((prev) => ({ ...prev, [id]: cap }))
+            }
+            captions={captions}
+          />
+        )}
+        {showRecorder && (
+          <div className="flex items-center justify-between gap-2 border-t bg-muted/30 p-2">
+            <VoiceRecorder onRecorded={onVoiceRecorded} onCancel={() => setShowRecorder(false)} />
+            <span className="text-xs text-muted-foreground">
+              Toca ■ para detener
+            </span>
+          </div>
+        )}
+        {isDragging && (
+          <div className="border-2 border-dashed border-primary bg-primary/5 p-4 text-center text-xs font-medium text-primary">
+            Suelta el archivo aquí para adjuntarlo
+          </div>
+        )}
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            send();
+          }}
+          className="flex items-end gap-2 p-3"
         >
-          <Mic className={cn("h-4 w-4", showRecorder && "text-red-500")} />
-        </Button>
-        <Textarea
-          ref={ref}
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={onKeyDown}
-          onPaste={onPaste}
-          placeholder="Escribe un mensaje… (Enter para enviar, Shift+Enter nueva línea)"
-          rows={1}
-          disabled={isPending}
-          className="min-h-[40px] flex-1 resize-none"
-        />
-        <Button type="submit" disabled={!canSend}>
-          {isPending ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <Send className="h-4 w-4" />
-          )}
-          <span className="sr-only">Enviar</span>
-        </Button>
-      </form>
-    </div>
+          <MediaUploadButton onFilesAdded={addFiles} isDisabled={isPending} />
+          <Button
+            type="button"
+            variant={showRecorder ? "default" : "ghost"}
+            size="icon"
+            title="Grabar nota de voz"
+            onClick={() => setShowRecorder((v) => !v)}
+            disabled={isPending}
+          >
+            <Mic className={cn("h-4 w-4", showRecorder && "text-red-500")} />
+          </Button>
+          <Textarea
+            ref={ref}
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={onKeyDown}
+            onPaste={onPaste}
+            placeholder="Escribe un mensaje… (Enter para enviar, Shift+Enter nueva línea)"
+            rows={1}
+            disabled={isPending}
+            className="min-h-[40px] flex-1 resize-none"
+          />
+          <Button type="submit" disabled={!canSend}>
+            {isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Send className="h-4 w-4" />
+            )}
+            <span className="sr-only">Enviar</span>
+          </Button>
+        </form>
+      </div>
+    </MediaDropZone>
   );
 }
+let fileIdCounter = 0;
