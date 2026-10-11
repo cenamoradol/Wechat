@@ -40,11 +40,19 @@ export function VoiceRecorder({
     if (state === "unsupported") return;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mime = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+      // ponytail: prefer audio/mp4 (Safari + WhatsApp friendly). Chrome
+      // records webm; for those we fall back, and the server action will
+      // reject the upload with a clear error telling the user to use
+      // Safari or upload an audio file.
+      const mime = MediaRecorder.isTypeSupported("audio/mp4;codecs=mp4a.40.2")
+        ? "audio/mp4;codecs=mp4a.40.2"
+        : MediaRecorder.isTypeSupported("audio/mp4")
+        ? "audio/mp4"
+        : MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
         ? "audio/webm;codecs=opus"
         : MediaRecorder.isTypeSupported("audio/webm")
         ? "audio/webm"
-        : "audio/mp4";
+        : "audio/mpeg";
       const recorder = new MediaRecorder(stream, { mimeType: mime });
       recorderRef.current = recorder;
       chunksRef.current = [];

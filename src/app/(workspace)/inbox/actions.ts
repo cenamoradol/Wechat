@@ -9,6 +9,7 @@ import { getAdapter } from "@/lib/channels";
 import { deleteConversationMedia } from "@/lib/supabase/storage";
 import { getActiveWorkspaceIdAction } from "@/app/(workspace)/actions";
 import { getWorkspaceStorageQuota, uploadMediaFile } from "@/lib/supabase/storage";
+import { isMimeAllowedByChannel } from "@/lib/channels/allowed-mimes";
 
 const Schema = z.object({
   conversationId: z.string().min(1),
@@ -199,6 +200,18 @@ export async function sendMediaMessageAction(
   const mediaType = mimeToMetaType(mimeType);
   if (!mediaType) {
     return { error: `Tipo de archivo no soportado: ${mimeType}` };
+  }
+
+  // 4.5. Per-channel MIME allowlist
+  if (!isMimeAllowedByChannel(ctx.channelType, mediaType, mimeType)) {
+    if (ctx.channelType === "whatsapp" && mediaType === "audio") {
+      return {
+        error: `WhatsApp no acepta audio en formato ${mimeType}. Usa Safari (graba en MP4) o sube un archivo de audio (mp3, m4a, ogg).`,
+      };
+    }
+    return {
+      error: `El canal ${ctx.channelType} no acepta este formato (${mimeType}).`,
+    };
   }
 
   // 5. Upload to Supabase Storage
