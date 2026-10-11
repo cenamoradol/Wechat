@@ -41,9 +41,10 @@ export async function generateAgentReply(args: {
   let reply = "";
   let usage: ChatUsage;
 
-  if (args.agent.provider === "openai") {
-    const cfg = PROVIDER_CONFIG.openai;
-    const res = await fetch(`${cfg.baseUrl}/chat/completions`, {
+  if (args.agent.provider === "openai" || args.agent.provider === "minimax") {
+    const cfg = PROVIDER_CONFIG[args.agent.provider];
+    const path = args.agent.provider === "minimax" ? "/v1/text/chatcompletion_v2" : "/chat/completions";
+    const res = await fetch(`${cfg.baseUrl}${path}`, {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -58,7 +59,18 @@ export async function generateAgentReply(args: {
     });
     if (!res.ok) {
       const txt = await res.text();
-      throw new Error(`openai ${res.status}: ${txt.slice(0, 200)}`);
+      // MiniMax wraps errors in base_resp
+      if (args.agent.provider === "minimax") {
+        try {
+          const j = JSON.parse(txt) as { base_resp?: { status_code: number; status_msg: string } };
+          if (j.base_resp?.status_code && j.base_resp.status_code !== 0) {
+            throw new Error(`${args.agent.provider} ${j.base_resp.status_code}: ${j.base_resp.status_msg}`);
+          }
+        } catch (e) {
+          if (e instanceof Error && e.message.startsWith("minimax")) throw e;
+        }
+      }
+      throw new Error(`${args.agent.provider} ${res.status}: ${txt.slice(0, 200)}`);
     }
     const json = (await res.json()) as {
       choices: Array<{ message: { content: string } }>;
@@ -133,27 +145,36 @@ Mensaje del usuario: """${args.messageText}"""
 ¿Cumple el criterio?`;
 
   let text = "";
-  if (args.agent.provider === "openai") {
-    const cfg = PROVIDER_CONFIG.openai;
-    const res = await fetch(`${cfg.baseUrl}/chat/completions`, {
+  if (args.agent.provider === "openai" || args.agent.provider === "minimax") {
+    const cfg = PROVIDER_CONFIG[args.agent.provider];
+    const path = args.agent.provider === "minimax" ? "/v1/text/chatcompletion_v2" : "/chat/completions";
+    const body: Record<string, unknown> = {
+      model: args.agent.model,
+      temperature: args.agent.temperature ?? 0,
+      max_tokens: args.agent.maxTokens ?? 200,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+    };
+    // ponytail: response_format: json_object is OpenAI-specific. MiniMax rejects it.
+    if (args.agent.provider === "openai") body.response_format = { type: "json_object" };
+    const res = await fetch(`${cfg.baseUrl}${path}`, {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: args.agent.model,
-        temperature: args.agent.temperature ?? 0,
-        max_tokens: args.agent.maxTokens ?? 200,
-        response_format: { type: "json_object" },
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt },
-        ],
-      }),
+      body: JSON.stringify(body),
     });
     if (!res.ok) {
       const t = await res.text();
-      throw new Error(`openai ${res.status}: ${t.slice(0, 200)}`);
+      throw new Error(`${args.agent.provider} ${res.status}: ${t.slice(0, 200)}`);
     }
-    const json = (await res.json()) as { choices: Array<{ message: { content: string } }> };
+    const json = (await res.json()) as {
+      choices: Array<{ message: { content: string } }>;
+      base_resp?: { status_code: number; status_msg: string };
+    };
+    if (args.agent.provider === "minimax" && json.base_resp?.status_code && json.base_resp.status_code !== 0) {
+      throw new Error(`minimax ${json.base_resp.status_code}: ${json.base_resp.status_msg}`);
+    }
     text = json.choices[0]?.message?.content ?? "";
   } else {
     // Anthropic / Minimax

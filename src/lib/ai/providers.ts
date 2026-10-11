@@ -14,9 +14,9 @@ import type { AIProvider } from "./types";
 export const PROVIDER_CONFIG: Record<AIProvider, { baseUrl: string; testModel: string; format: "openai" | "anthropic" }> = {
   openai: { baseUrl: "https://api.openai.com/v1", testModel: "gpt-4o-mini", format: "openai" },
   anthropic: { baseUrl: "https://api.anthropic.com", testModel: "claude-3-5-haiku-latest", format: "anthropic" },
-  // ponytail: error format is Anthropic-style. Treat as Anthropic-compat
-  // (uses x-api-key header + separate system prompt field).
-  minimax: { baseUrl: "https://api.minimaxi.com", testModel: "MiniMax-M3", format: "anthropic" },
+  // ponytail: MiniMax's real OpenAI-compat endpoint is /v1/text/chatcompletion_v2
+  // (NOT /chat/completions). Their error format also differs (base_resp wrapper).
+  minimax: { baseUrl: "https://api.minimaxi.com", testModel: "MiniMax-Text-01", format: "openai" },
 };
 
 export async function getApiKey(
@@ -100,8 +100,9 @@ export async function pingProvider(
   const cfg = PROVIDER_CONFIG[provider];
   try {
     if (cfg.format === "openai") {
-      // OpenAI and Minimax share the OpenAI chat completions shape.
-      const res = await fetch(`${cfg.baseUrl}/chat/completions`, {
+      // MiniMax uses /v1/text/chatcompletion_v2; OpenAI uses /chat/completions.
+      const path = provider === "minimax" ? "/v1/text/chatcompletion_v2" : "/chat/completions";
+      const res = await fetch(`${cfg.baseUrl}${path}`, {
         method: "POST",
         headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -110,8 +111,17 @@ export async function pingProvider(
           max_tokens: 5,
         }),
       });
+      const txt = await res.text();
+      // MiniMax returns 200 OK with base_resp.status_code for auth errors.
+      if (provider === "minimax") {
+        try {
+          const j = JSON.parse(txt) as { base_resp?: { status_code: number; status_msg: string } };
+          if (j.base_resp?.status_code && j.base_resp.status_code !== 0) {
+            return { ok: false, error: `${provider} ${j.base_resp.status_code}: ${j.base_resp.status_msg}` };
+          }
+        } catch { /* not JSON, fall through */ }
+      }
       if (!res.ok) {
-        const txt = await res.text();
         return { ok: false, error: `${provider} ${res.status}: ${txt.slice(0, 200)}` };
       }
       return { ok: true };
