@@ -14,7 +14,9 @@ import type { AIProvider } from "./types";
 export const PROVIDER_CONFIG: Record<AIProvider, { baseUrl: string; testModel: string; format: "openai" | "anthropic" }> = {
   openai: { baseUrl: "https://api.openai.com/v1", testModel: "gpt-4o-mini", format: "openai" },
   anthropic: { baseUrl: "https://api.anthropic.com", testModel: "claude-3-5-haiku-latest", format: "anthropic" },
-  minimax: { baseUrl: "https://api.minimaxi.com/v1", testModel: "MiniMax-M3", format: "openai" },
+  // ponytail: error format is Anthropic-style. Treat as Anthropic-compat
+  // (uses x-api-key header + separate system prompt field).
+  minimax: { baseUrl: "https://api.minimaxi.com", testModel: "MiniMax-M3", format: "anthropic" },
 };
 
 export async function getApiKey(

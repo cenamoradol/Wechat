@@ -1,6 +1,6 @@
 // src/lib/ai/chat.ts
 // Main chat function. Sends a conversation to OpenAI / Anthropic /
-// Minimax (OpenAI-compatible) and returns the generated reply + usage.
+// Minimax (Anthropic-style) and returns the generated reply + usage.
 
 import { getApiKey, touchApiKey, PROVIDER_CONFIG } from "./providers";
 import { searchKnowledge } from "./knowledge";
@@ -41,8 +41,8 @@ export async function generateAgentReply(args: {
   let reply = "";
   let usage: ChatUsage;
 
-  if (args.agent.provider === "openai" || args.agent.provider === "minimax") {
-    const cfg = PROVIDER_CONFIG[args.agent.provider];
+  if (args.agent.provider === "openai") {
+    const cfg = PROVIDER_CONFIG.openai;
     const res = await fetch(`${cfg.baseUrl}/chat/completions`, {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
@@ -58,7 +58,7 @@ export async function generateAgentReply(args: {
     });
     if (!res.ok) {
       const txt = await res.text();
-      throw new Error(`${args.agent.provider} ${res.status}: ${txt.slice(0, 200)}`);
+      throw new Error(`openai ${res.status}: ${txt.slice(0, 200)}`);
     }
     const json = (await res.json()) as {
       choices: Array<{ message: { content: string } }>;
@@ -71,8 +71,9 @@ export async function generateAgentReply(args: {
       latencyMs: Date.now() - start,
     };
   } else {
-    // Anthropic
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
+    // Anthropic and Minimax (both use Anthropic-style API).
+    const cfg = PROVIDER_CONFIG[args.agent.provider];
+    const res = await fetch(`${cfg.baseUrl}/v1/messages`, {
       method: "POST",
       headers: {
         "x-api-key": apiKey,
@@ -89,7 +90,7 @@ export async function generateAgentReply(args: {
     });
     if (!res.ok) {
       const txt = await res.text();
-      throw new Error(`Anthropic ${res.status}: ${txt.slice(0, 200)}`);
+      throw new Error(`${args.agent.provider} ${res.status}: ${txt.slice(0, 200)}`);
     }
     const json = (await res.json()) as {
       content: Array<{ type: string; text?: string }>;
@@ -104,9 +105,7 @@ export async function generateAgentReply(args: {
     };
   }
 
-  // ponytail: fire-and-forget update of last_used_at
   void touchApiKey(args.agent.workspaceId, args.agent.provider);
-
   return { content: reply, usage, sources };
 }
 
@@ -134,35 +133,32 @@ Mensaje del usuario: """${args.messageText}"""
 ¿Cumple el criterio?`;
 
   let text = "";
-  if (args.agent.provider === "openai" || args.agent.provider === "minimax") {
-    const cfg = PROVIDER_CONFIG[args.agent.provider];
-    const body: Record<string, unknown> = {
-      model: args.agent.model,
-      temperature: args.agent.temperature ?? 0,
-      max_tokens: args.agent.maxTokens ?? 200,
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt },
-      ],
-    };
-    // ponytail: response_format is OpenAI-specific. Minimax supports it
-    // but if it fails we'll retry without it.
-    if (args.agent.provider === "openai") {
-      body.response_format = { type: "json_object" };
-    }
+  if (args.agent.provider === "openai") {
+    const cfg = PROVIDER_CONFIG.openai;
     const res = await fetch(`${cfg.baseUrl}/chat/completions`, {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify(body),
+      body: JSON.stringify({
+        model: args.agent.model,
+        temperature: args.agent.temperature ?? 0,
+        max_tokens: args.agent.maxTokens ?? 200,
+        response_format: { type: "json_object" },
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
+        ],
+      }),
     });
     if (!res.ok) {
       const t = await res.text();
-      throw new Error(`${args.agent.provider} ${res.status}: ${t.slice(0, 200)}`);
+      throw new Error(`openai ${res.status}: ${t.slice(0, 200)}`);
     }
     const json = (await res.json()) as { choices: Array<{ message: { content: string } }> };
     text = json.choices[0]?.message?.content ?? "";
   } else {
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
+    // Anthropic / Minimax
+    const cfg = PROVIDER_CONFIG[args.agent.provider];
+    const res = await fetch(`${cfg.baseUrl}/v1/messages`, {
       method: "POST",
       headers: {
         "x-api-key": apiKey,
@@ -179,7 +175,7 @@ Mensaje del usuario: """${args.messageText}"""
     });
     if (!res.ok) {
       const t = await res.text();
-      throw new Error(`Anthropic ${res.status}: ${t.slice(0, 200)}`);
+      throw new Error(`${args.agent.provider} ${res.status}: ${t.slice(0, 200)}`);
     }
     const json = (await res.json()) as {
       content: Array<{ type: string; text?: string }>;
@@ -188,7 +184,6 @@ Mensaje del usuario: """${args.messageText}"""
     text = textBlock?.text ?? "";
   }
 
-  // Extract JSON from text (handle code fences if any)
   const m = text.match(/\{[\s\S]*\}/);
   if (!m) return { matches: false, reasoning: `no JSON: ${text.slice(0, 100)}` };
   try {
