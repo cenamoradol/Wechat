@@ -50,11 +50,20 @@ let fileIdCounter = 0;
 /**
  * Read dataUrl for a file, lazy-encoding. Returns the dataUrl string.
  * Used right before sending so we don't have stale dataUrl in state.
+ * Re-wraps the file with the clean MIME so FileReader produces a clean
+ * data URL (e.g. without `;codecs=opus`).
  */
 export async function ensureDataUrl(f: UploadedFile): Promise<string> {
   if (f.dataUrl) return f.dataUrl;
-  const url = await readAsDataUrl(f.file);
-  // Mutate to cache (same reference is in state)
+  // ponytail: FileReader uses the File's `.type` verbatim — repack with
+  // the stripped MIME so the dataUrl has no `;codecs=...` segment.
+  const cleanBlob = f.mimeType
+    ? new Blob([f.file], { type: f.mimeType })
+    : f.file;
+  const cleanFile = cleanBlob instanceof File
+    ? cleanBlob
+    : new File([cleanBlob], f.fileName, { type: f.mimeType });
+  const url = await readAsDataUrl(cleanFile);
   f.dataUrl = url;
   return url;
 }

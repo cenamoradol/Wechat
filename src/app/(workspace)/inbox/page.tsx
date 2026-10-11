@@ -3,6 +3,7 @@ import { unstable_noStore } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { MessageSquare } from "lucide-react";
 import { ReplyBox } from "@/components/inbox/reply-box";
+import { resolveMediaUrl } from "@/lib/media/resolve";
 import { MessagesList } from "@/components/inbox/messages-list";
 import { ConversationsSidebar } from "@/components/inbox/conversations-sidebar";
 import { ThreadHeader } from "@/components/inbox/thread-header";
@@ -159,6 +160,13 @@ async function ActiveThread({
 
   if (msgErr) console.error("messages query failed", msgErr);
 
+  // ponytail: storage is private — rewrite any Supabase storage URLs to
+  // the auth-checked /api/media proxy.
+  const messagesForClient = (messages ?? []).map((m) => ({
+    ...m,
+    media_url: resolveMediaUrl(m.media_url),
+  }));
+
   const contact = (conv as any)?.contact_channels?.contacts;
   const channel = (conv as any)?.contact_channels?.channels;
   const channelType = channel?.type ?? "whatsapp";
@@ -187,7 +195,7 @@ async function ActiveThread({
       )}
       <MessagesList
         conversationId={conversationId}
-        initialMessages={(messages ?? []) as any}
+        initialMessages={messagesForClient as any}
       />
       <ReplyBox conversationId={conversationId} />
     </>

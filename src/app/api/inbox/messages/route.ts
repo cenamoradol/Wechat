@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { resolveMediaUrl } from "@/lib/media/resolve";
 
 /**
  * Lightweight polling endpoint used by the inbox client as a realtime fallback.
@@ -32,5 +33,12 @@ export async function POST(req: NextRequest) {
   const { data, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  return NextResponse.json({ messages: data ?? [] });
+  // ponytail: rewrite Supabase storage URLs to the /api/media proxy
+  // so the client can load them in <img>/<video>/<audio> tags.
+  const messages = (data ?? []).map((m) => ({
+    ...m,
+    media_url: resolveMediaUrl(m.media_url),
+  }));
+
+  return NextResponse.json({ messages });
 }

@@ -209,6 +209,13 @@ export function MessagesList({
           // INSERT: new message arrived; UPDATE: e.g. read_at was set externally
           const next = { ...(payload.new as Message) };
 
+          // ponytail: rewrite Supabase storage URLs to the /api/media proxy
+          // (realtime payloads don't go through resolveMediaUrl server-side).
+          if (next.media_url) {
+            const m = next.media_url.match(/\/storage\/v1\/(?:object|render)\/(?:public|sign)\/media\/(.+?)(?:\?|$)/);
+            if (m) next.media_url = `/api/media/${m[1]}`;
+          }
+
           // Realtime doesn't include joined tables. If the message has
           // sent_by but no profile, fetch it so we can show who sent it.
           if (next.direction === "out" && next.sent_by && !next.profiles) {
