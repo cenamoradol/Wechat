@@ -550,6 +550,7 @@ export type Database = {
       ai_messages: {
         Row: {
           id: string;
+          workspace_id: string;
           agent_id: string;
           conversation_id: string | null;
           contact_id: string | null;
@@ -561,6 +562,7 @@ export type Database = {
           created_at: string;
         };
         Insert: {
+          workspace_id: string;
           agent_id: string;
           conversation_id?: string | null;
           contact_id?: string | null;

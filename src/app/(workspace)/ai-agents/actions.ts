@@ -200,9 +200,10 @@ export async function testChatAction(input: {
     const res = await generateAgentReply({ agent, messages: input.messages });
     // Log
     await admin.from("ai_messages").insert({
+      workspace_id: agent.workspaceId,
       agent_id: agent.id,
-      conversation_id: null as never, // test chats have no conversation
-      contact_id: null as never,
+      conversation_id: null,
+      contact_id: null,
       role: "assistant",
       content: res.content,
       tokens_in: res.usage.tokensIn,
