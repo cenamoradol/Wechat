@@ -1,14 +1,19 @@
 -- Fase 7: AI Agents
 -- Tablas: ai_agents, ai_knowledge_docs, ai_messages, ai_provider_keys
--- Depende de la columna conversations.ai_agent_id (añadida en 003_messaging.sql)
+-- Full re-runnable (idempotent for tables, FK, policies, indexes)
 
-create table public.ai_agents (
+-- 1. Column on conversations
+alter table public.conversations
+  add column if not exists ai_agent_id uuid;
+
+-- 2. ai_agents
+create table if not exists public.ai_agents (
   id uuid primary key default gen_random_uuid(),
   workspace_id uuid references public.workspaces(id) on delete cascade not null,
   name text not null,
   description text,
   provider text not null check (provider in ('openai', 'anthropic')),
-  model text not null,                 -- gpt-4o-mini | claude-3-5-sonnet-latest | etc
+  model text not null,
   system_prompt text not null,
   temperature numeric(3,2) default 0.7 not null,
   max_tokens int default 1024 not null,
@@ -21,10 +26,11 @@ create table public.ai_agents (
   updated_at timestamptz default now() not null
 );
 
-create unique index one_default_agent_per_workspace
+create unique index if not exists one_default_agent_per_workspace
   on public.ai_agents(workspace_id) where is_default;
 
-create table public.ai_knowledge_docs (
+-- 3. ai_knowledge_docs
+create table if not exists public.ai_knowledge_docs (
   id uuid primary key default gen_random_uuid(),
   workspace_id uuid references public.workspaces(id) on delete cascade not null,
   agent_id uuid references public.ai_agents(id) on delete cascade not null,
@@ -38,10 +44,13 @@ create table public.ai_knowledge_docs (
   created_at timestamptz default now() not null
 );
 
-create index on public.ai_knowledge_docs using gin(tsv);
-create index on public.ai_knowledge_docs(agent_id);
+create index if not exists ai_knowledge_docs_tsv_idx
+  on public.ai_knowledge_docs using gin(tsv);
+create index if not exists ai_knowledge_docs_agent_idx
+  on public.ai_knowledge_docs(agent_id);
 
-create table public.ai_messages (
+-- 4. ai_messages
+create table if not exists public.ai_messages (
   id uuid primary key default gen_random_uuid(),
   agent_id uuid references public.ai_agents(id) on delete cascade not null,
   conversation_id uuid references public.conversations(id) on delete cascade not null,
@@ -54,15 +63,24 @@ create table public.ai_messages (
   created_at timestamptz default now() not null
 );
 
-create index on public.ai_messages(conversation_id, created_at);
-create index on public.ai_messages(agent_id, created_at desc);
+create index if not exists ai_messages_conv_idx
+  on public.ai_messages(conversation_id, created_at);
+create index if not exists ai_messages_agent_idx
+  on public.ai_messages(agent_id, created_at desc);
 
--- FK pendiente
--- ponytail: conversations.ai_agent_id was in the plan but not in migration 005.
--- Add the column first, then the FK.
-alter table public.conversations
-  add column if not exists ai_agent_id uuid;
+-- 5. ai_provider_keys
+create table if not exists public.ai_provider_keys (
+  id uuid primary key default gen_random_uuid(),
+  workspace_id uuid references public.workspaces(id) on delete cascade not null,
+  provider text not null check (provider in ('openai', 'anthropic')),
+  api_key_enc bytea not null,
+  label text,
+  last_used_at timestamptz,
+  created_at timestamptz default now() not null,
+  unique(workspace_id, provider)
+);
 
+-- 6. FK on conversations.ai_agent_id -> ai_agents.id
 do $$
 begin
   if not exists (
@@ -78,32 +96,25 @@ end $$;
 create index if not exists conversations_ai_agent_idx
   on public.conversations(ai_agent_id) where ai_agent_id is not null;
 
--- Encrypted API keys (per-workspace BYOK)
-create table public.ai_provider_keys (
-  id uuid primary key default gen_random_uuid(),
-  workspace_id uuid references public.workspaces(id) on delete cascade not null,
-  provider text not null check (provider in ('openai', 'anthropic')),
-  api_key_enc bytea not null,
-  label text,                          -- "default", "team-key", etc
-  last_used_at timestamptz,
-  created_at timestamptz default now() not null,
-  unique(workspace_id, provider)
-);
-
--- RLS
+-- 7. RLS — enable on each table (no-op if already enabled)
 alter table public.ai_agents enable row level security;
 alter table public.ai_knowledge_docs enable row level security;
 alter table public.ai_messages enable row level security;
 alter table public.ai_provider_keys enable row level security;
 
+-- 8. Policies — drop+recreate for idempotency
+drop policy if exists "workspace_scoped" on public.ai_agents;
 create policy "workspace_scoped" on public.ai_agents
   for all using (workspace_id in (select public.user_workspace_ids()));
 
+drop policy if exists "workspace_scoped" on public.ai_knowledge_docs;
 create policy "workspace_scoped" on public.ai_knowledge_docs
   for all using (workspace_id in (select public.user_workspace_ids()));
 
+drop policy if exists "workspace_scoped" on public.ai_messages;
 create policy "workspace_scoped" on public.ai_messages
   for all using (workspace_id in (select public.user_workspace_ids()));
 
+drop policy if exists "workspace_scoped" on public.ai_provider_keys;
 create policy "workspace_scoped" on public.ai_provider_keys
   for all using (workspace_id in (select public.user_workspace_ids()));
