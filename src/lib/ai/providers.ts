@@ -32,10 +32,24 @@ export async function getApiKey(
     .eq("workspace_id", workspaceId)
     .eq("provider", provider)
     .maybeSingle();
-  if (error || !data) return null;
+  if (error) {
+    console.error("[ai] getApiKey query error", { provider, error: error.message });
+    return null;
+  }
+  if (!data) {
+    console.warn("[ai] getApiKey: no row", { provider, workspaceId });
+    return null;
+  }
   try {
-    return decrypt(Buffer.from(data.api_key_enc as string, "base64"));
-  } catch {
+    const raw = data.api_key_enc as string;
+    // ponytail: postgrest-js returns bytea as base64 OR hex (\\x...).
+    // Try base64 first, then hex.
+    const buf = raw.startsWith("\\x")
+      ? Buffer.from(raw.slice(2), "hex")
+      : Buffer.from(raw, "base64");
+    return decrypt(buf);
+  } catch (e) {
+    console.error("[ai] getApiKey decrypt failed", { provider, e: (e as Error).message });
     return null;
   }
 }
