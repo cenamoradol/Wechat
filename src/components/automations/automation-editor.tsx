@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Save, Plus, X, GripVertical } from "lucide-react";
+import { Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -14,33 +14,20 @@ import {
   updateAutomationAction,
   type AutomationFormData,
 } from "@/app/(workspace)/automations/actions";
+import { listAutomationOptionsAction } from "@/app/(workspace)/automations/options-action";
 import type { Step, Trigger } from "@/lib/automations/types";
+import { AddStepMenu, StepForm, defaultStepFor, validateStep } from "@/components/automations/step-form";
 
 type Props = {
   initial?: AutomationFormData & { id?: string };
 };
 
-const TRIGGER_TYPES: Array<{ value: Trigger["type"]; label: string; description: string }> = [
-  { value: "message_received", label: "Mensaje recibido", description: "Cuando un cliente escribe algo" },
-  { value: "message_unanswered", label: "Mensaje sin responder", description: "Pasado un tiempo sin respuesta de un agente" },
-  { value: "contact_created", label: "Contacto nuevo", description: "Cuando un nuevo contacto es creado" },
-  { value: "tag_added", label: "Etiqueta añadida", description: "Cuando se añade una etiqueta al contacto" },
-  { value: "schedule", label: "Programado (cron)", description: "Corre según un horario" },
-];
-
-const STEP_TYPES: Array<{ value: Step["type"]; label: string; description: string }> = [
-  { value: "send_text", label: "Enviar texto", description: "Mensaje libre" },
-  { value: "send_template", label: "Enviar plantilla", description: "Plantilla aprobada de Meta" },
-  { value: "add_tag", label: "Añadir etiqueta", description: "Etiqueta al contacto" },
-  { value: "remove_tag", label: "Quitar etiqueta", description: "Etiqueta del contacto" },
-  { value: "set_field", label: "Establecer campo", description: "Campo personalizado" },
-  { value: "wait", label: "Esperar", description: "5m / 30m / 1h / 1d" },
-  { value: "assign_to", label: "Asignar a", description: "Agente específico" },
-  { value: "set_status", label: "Cambiar estado", description: "open / pending / closed" },
-  { value: "close_conversation", label: "Cerrar conversación", description: "" },
-  { value: "webhook", label: "Webhook", description: "Llamar URL externa" },
-  { value: "ai_reply", label: "Respuesta IA", description: "(requiere Fase 7)" },
-  { value: "branch", label: "Condición (if/else)", description: "Bifurcación" },
+const TRIGGER_LABELS: Array<{ value: Trigger["type"]; label: string; description: string }> = [
+  { value: "message_received", label: "Mensaje recibido", description: "Cuando un cliente escribe" },
+  { value: "message_unanswered", label: "Mensaje sin responder", description: "Pasado X minutos sin respuesta" },
+  { value: "contact_created", label: "Contacto nuevo", description: "Cuando llega un contacto nuevo" },
+  { value: "tag_added", label: "Etiqueta añadida", description: "Cuando se etiqueta al contacto" },
+  { value: "schedule", label: "Programado (cron)", description: "Corre según horario" },
 ];
 
 export function AutomationEditor({ initial }: Props) {
@@ -53,11 +40,38 @@ export function AutomationEditor({ initial }: Props) {
   );
   const [steps, setSteps] = useState<Step[]>((initial?.steps as Step[] | undefined) ?? []);
   const [pending, start] = useTransition();
+  const [options, setOptions] = useState<{
+    tags: Array<{ id: string; name: string; color: string }>;
+    templates: Array<{ id: string; name: string; language: string }>;
+    members: Array<{ id: string; full_name: string | null; email: string }>;
+    customFields: Array<{ id: string; name: string; type: string }>;
+  }>({ tags: [], templates: [], members: [], customFields: [] });
+
+  useEffect(() => {
+    listAutomationOptionsAction()
+      .then((res) => {
+        if (res.error) return;
+        setOptions({
+          tags: res.tags ?? [],
+          templates: res.templates ?? [],
+          members: res.members ?? [],
+          customFields: res.customFields ?? [],
+        });
+      })
+      .catch((e) => console.error(e));
+  }, []);
 
   const save = () => {
     if (!name.trim()) {
-      toast.error("Nombre requerido");
+      toast.error("El nombre es obligatorio");
       return;
+    }
+    for (let i = 0; i < steps.length; i++) {
+      const err = validateStep(steps[i]);
+      if (err) {
+        toast.error(`Step #${i + 1}: ${err}`);
+        return;
+      }
     }
     const payload: AutomationFormData = { name, description: description || undefined, trigger, steps, status };
     start(async () => {
@@ -73,15 +87,32 @@ export function AutomationEditor({ initial }: Props) {
     });
   };
 
+  const addStep = (type: Step["type"]) => {
+    setSteps((prev) => [...prev, defaultStepFor(type)]);
+  };
+  const updateStep = (i: number, s: Step) => {
+    setSteps((prev) => prev.map((x, j) => (j === i ? s : x)));
+  };
+  const removeStep = (i: number) => {
+    setSteps((prev) => prev.filter((_, j) => j !== i));
+  };
+  const moveStep = (i: number, dir: -1 | 1) => {
+    setSteps((prev) => {
+      const next = prev.slice();
+      const j = i + dir;
+      if (j < 0 || j >= next.length) return prev;
+      [next[i], next[j]] = [next[j], next[i]];
+      return next;
+    });
+  };
+
   return (
     <div className="space-y-6 p-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">{initial?.id ? "Editar automatización" : "Nueva automatización"}</h1>
         <div className="flex items-center gap-2">
           <Select value={status} onValueChange={(v) => setStatus(v as typeof status)}>
-            <SelectTrigger className="w-32">
-              <SelectValue />
-            </SelectTrigger>
+            <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="draft">Borrador</SelectItem>
               <SelectItem value="active">Activa</SelectItem>
@@ -96,9 +127,7 @@ export function AutomationEditor({ initial }: Props) {
       </div>
 
       <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Información</CardTitle>
-        </CardHeader>
+        <CardHeader><CardTitle className="text-base">Información</CardTitle></CardHeader>
         <CardContent className="space-y-3">
           <div>
             <Label>Nombre</Label>
@@ -112,24 +141,17 @@ export function AutomationEditor({ initial }: Props) {
       </Card>
 
       <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Trigger</CardTitle>
-        </CardHeader>
+        <CardHeader><CardTitle className="text-base">Trigger</CardTitle></CardHeader>
         <CardContent className="space-y-3">
           <div>
             <Label>Tipo</Label>
             <Select
               value={trigger.type}
-              onValueChange={(v) => {
-                const next = v as Trigger["type"];
-                setTrigger(defaultTriggerFor(next) as Trigger);
-              }}
+              onValueChange={(v) => setTrigger(defaultTriggerFor(v as Trigger["type"]))}
             >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
+              <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                {TRIGGER_TYPES.map((t) => (
+                {TRIGGER_LABELS.map((t) => (
                   <SelectItem key={t.value} value={t.value}>
                     {t.label} — <span className="text-muted-foreground">{t.description}</span>
                   </SelectItem>
@@ -137,54 +159,32 @@ export function AutomationEditor({ initial }: Props) {
               </SelectContent>
             </Select>
           </div>
-          <TriggerFields trigger={trigger} onChange={setTrigger} />
+          <TriggerFields trigger={trigger} onChange={setTrigger} options={options} />
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-base">Steps ({steps.length})</CardTitle>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              const next = prompt(`Tipo de step (uno de: ${STEP_TYPES.map((s) => s.value).join(", ")})`);
-              if (!next) return;
-              if (!STEP_TYPES.find((s) => s.value === next)) {
-                toast.error("Tipo inválido");
-                return;
-              }
-              setSteps([...steps, defaultStepFor(next as Step["type"])]);
-            }}
-          >
-            <Plus className="h-4 w-4" />
-            Añadir step
-          </Button>
+          <AddStepMenu onAdd={addStep} />
         </CardHeader>
         <CardContent className="space-y-2">
           {steps.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Sin steps. Añade al menos uno.</p>
+            <p className="rounded border border-dashed p-6 text-center text-sm text-muted-foreground">
+              Aún no hay steps. Haz click en "Añadir step" para empezar.
+            </p>
           ) : (
             steps.map((step, i) => (
-              <div key={i} className="flex items-start gap-2 rounded border bg-muted/30 p-3">
-                <GripVertical className="mt-1 h-4 w-4 text-muted-foreground" />
-                <div className="flex-1">
-                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                    {i + 1}. {step.type}
-                  </p>
-                  <pre className="mt-1 text-xs text-muted-foreground">
-                    {JSON.stringify(step, null, 2)}
-                  </pre>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setSteps(steps.filter((_, j) => j !== i))}
-                  title="Quitar"
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
+              <StepForm
+                key={i}
+                step={step}
+                index={i}
+                options={options}
+                onChange={(s) => updateStep(i, s)}
+                onRemove={() => removeStep(i)}
+                onMoveUp={i > 0 ? () => moveStep(i, -1) : undefined}
+                onMoveDown={i < steps.length - 1 ? () => moveStep(i, 1) : undefined}
+              />
             ))
           )}
         </CardContent>
@@ -208,25 +208,17 @@ function defaultTriggerFor(t: Trigger["type"]): Trigger {
   }
 }
 
-function defaultStepFor(t: Step["type"]): Step {
-  switch (t) {
-    case "send_text": return { type: "send_text", text: "" };
-    case "send_template": return { type: "send_template", templateId: "", vars: {} };
-    case "add_tag": return { type: "add_tag", tagId: "" };
-    case "remove_tag": return { type: "remove_tag", tagId: "" };
-    case "set_field": return { type: "set_field", fieldId: "", value: "" };
-    case "wait": return { type: "wait", duration: "5m" };
-    case "assign_to": return { type: "assign_to", userId: "" };
-    case "set_status": return { type: "set_status", status: "open" };
-    case "close_conversation": return { type: "close_conversation" };
-    case "webhook": return { type: "webhook", url: "", method: "POST" };
-    case "ai_reply": return { type: "ai_reply", agentId: "" };
-    case "branch": return { type: "branch", if: { field: "channel", operator: "is", value: "whatsapp" }, then: [] };
-  }
-}
-
-function TriggerFields({ trigger, onChange }: { trigger: Trigger; onChange: (t: Trigger) => void }) {
-  // ponytail: minimal fields per trigger type. Validation is server-side.
+function TriggerFields({
+  trigger,
+  onChange,
+  options,
+}: {
+  trigger: Trigger;
+  onChange: (t: Trigger) => void;
+  options: {
+    tags: Array<{ id: string; name: string; color: string }>;
+  };
+}) {
   if (trigger.type === "message_received") {
     return (
       <div className="grid grid-cols-2 gap-2">
@@ -257,7 +249,7 @@ function TriggerFields({ trigger, onChange }: { trigger: Trigger; onChange: (t: 
         {trigger.match !== "any" && (
           <div className="col-span-2">
             <Label>Valor</Label>
-            <Input value={trigger.value} onChange={(e) => onChange({ ...trigger, value: e.target.value })} />
+            <Input value={trigger.value} onChange={(e) => onChange({ ...trigger, value: e.target.value })} placeholder="palabra clave, regex, etc." />
           </div>
         )}
       </div>
@@ -279,8 +271,20 @@ function TriggerFields({ trigger, onChange }: { trigger: Trigger; onChange: (t: 
   if (trigger.type === "tag_added") {
     return (
       <div>
-        <Label>Tag ID (UUID)</Label>
-        <Input value={trigger.tagId} onChange={(e) => onChange({ ...trigger, tagId: e.target.value })} />
+        <Label>Etiqueta</Label>
+        <Select value={trigger.tagId} onValueChange={(v) => onChange({ ...trigger, tagId: v })}>
+          <SelectTrigger><SelectValue placeholder="Selecciona etiqueta" /></SelectTrigger>
+          <SelectContent>
+            {options.tags.length === 0 ? (
+              <div className="p-2 text-xs text-muted-foreground">Sin etiquetas.</div>
+            ) : (
+              options.tags.map((t) => (
+                <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+              ))
+            )}
+          </SelectContent>
+        </Select>
+        <p className="mt-1 text-xs text-muted-foreground">O pega el UUID: {trigger.tagId}</p>
       </div>
     );
   }

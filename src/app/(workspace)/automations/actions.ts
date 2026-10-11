@@ -5,32 +5,33 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { getActiveWorkspaceIdAction } from "@/app/(workspace)/actions";
 
-// ponytail: keep validation tight but not exhaustive. The runtime
-// engine validates the exact shape per step.
+// ponytail: relax the schema so users can save steps with empty fields
+// during editing. Runtime engine validates shape per step. We only check
+// the broad shape here.
 
 const StepSchema: z.ZodType<unknown> = z.lazy(() =>
   z.union([
-    z.object({ type: z.literal("send_text"), text: z.string().min(1).max(4096) }),
+    z.object({ type: z.literal("send_text"), text: z.string().max(4096) }),
     z.object({
       type: z.literal("send_template"),
-      templateId: z.string().uuid(),
+      templateId: z.string().max(100),
       vars: z.record(z.string(), z.string().max(4096)),
     }),
-    z.object({ type: z.literal("add_tag"), tagId: z.string().uuid() }),
-    z.object({ type: z.literal("remove_tag"), tagId: z.string().uuid() }),
-    z.object({ type: z.literal("set_field"), fieldId: z.string().uuid(), value: z.string().max(4096) }),
-    z.object({ type: z.literal("wait"), duration: z.string().regex(/^\d+\s*[smhd]$/i) }),
-    z.object({ type: z.literal("assign_to"), userId: z.string().uuid() }),
+    z.object({ type: z.literal("add_tag"), tagId: z.string().max(100) }),
+    z.object({ type: z.literal("remove_tag"), tagId: z.string().max(100) }),
+    z.object({ type: z.literal("set_field"), fieldId: z.string().max(100), value: z.string().max(4096) }),
+    z.object({ type: z.literal("wait"), duration: z.string().max(20) }),
+    z.object({ type: z.literal("assign_to"), userId: z.string().max(100) }),
     z.object({ type: z.literal("set_status"), status: z.enum(["open", "pending", "closed"]) }),
     z.object({ type: z.literal("close_conversation") }),
     z.object({
       type: z.literal("webhook"),
-      url: z.string().url(),
+      url: z.string().max(2000),
       method: z.enum(["GET", "POST", "PUT", "DELETE"]),
       headers: z.record(z.string(), z.string()).optional(),
       body: z.record(z.string(), z.unknown()).optional(),
     }),
-    z.object({ type: z.literal("ai_reply"), agentId: z.string().uuid(), handoffMessage: z.string().optional() }),
+    z.object({ type: z.literal("ai_reply"), agentId: z.string().max(100), handoffMessage: z.string().max(4096).optional() }),
     z.object({
       type: z.literal("branch"),
       if: z.object({
@@ -61,7 +62,7 @@ const TriggerSchema = z.union([
     type: z.literal("contact_created"),
     channel: z.enum(["whatsapp", "facebook", "instagram", "any"]),
   }),
-  z.object({ type: z.literal("tag_added"), tagId: z.string().uuid() }),
+  z.object({ type: z.literal("tag_added"), tagId: z.string().max(100) }),
   z.object({ type: z.literal("schedule"), cron: z.string().min(1).max(100), timezone: z.string().min(1).max(100) }),
 ]);
 
@@ -74,6 +75,61 @@ const AutomationSchema = z.object({
 });
 
 export type AutomationFormData = z.infer<typeof AutomationSchema>;
+
+// ponytail: client-side validation happens before calling these actions
+// (see automation-editor.tsx). The actions do a relaxed parse to avoid
+// schema-tripping during partial edits, then a hard validation per
+// step type here. This gives clearer error messages.
+function hardValidate(input: AutomationFormData): string | null {
+  if (!input.name.trim()) return "El nombre es obligatorio";
+  for (let i = 0; i < input.steps.length; i++) {
+    const s = input.steps[i] as { type: string };
+    const err = validateStep(s);
+    if (err) return `Step #${i + 1} (${s.type}): ${err}`;
+  }
+  return null;
+}
+
+function validateStep(s: { type: string; [k: string]: unknown }): string | null {
+  switch (s.type) {
+    case "send_text": {
+      if (!String(s.text ?? "").trim()) return "texto vacío";
+      return null;
+    }
+    case "send_template":
+      if (!String(s.templateId ?? "").trim()) return "templateId requerido";
+      return null;
+    case "add_tag":
+    case "remove_tag":
+      if (!String(s.tagId ?? "").trim()) return "tagId requerido";
+      return null;
+    case "set_field":
+      if (!String(s.fieldId ?? "").trim()) return "fieldId requerido";
+      if (!String(s.value ?? "").trim()) return "value requerido";
+      return null;
+    case "wait":
+      if (!/^\d+\s*[smhd]$/i.test(String(s.duration ?? ""))) return "duration inválida (usa 5m, 30m, 1h, 1d)";
+      return null;
+    case "assign_to":
+      if (!String(s.userId ?? "").trim()) return "userId requerido";
+      return null;
+    case "webhook":
+      if (!String(s.url ?? "").trim()) return "url requerida";
+      if (!/^https?:\/\//.test(String(s.url))) return "url debe empezar con http(s)://";
+      return null;
+    case "ai_reply":
+      if (!String(s.agentId ?? "").trim()) return "agentId requerido";
+      return null;
+    case "branch":
+      if (!String((s.if as { value?: string })?.value ?? "").trim()) return "if.value requerido";
+      return null;
+    case "set_status":
+    case "close_conversation":
+      return null;
+    default:
+      return `tipo desconocido: ${s.type}`;
+  }
+}
 
 async function requireMember(role: ("owner" | "admin" | "agent" | "viewer")[]) {
   const supabase = await createClient();
@@ -161,6 +217,8 @@ export async function listRunsAction(automationId: string, limit = 25): Promise<
 export async function createAutomationAction(input: AutomationFormData): Promise<{ id?: string; error?: string }> {
   const parsed = AutomationSchema.safeParse(input);
   if (!parsed.success) return { error: "Datos inválidos" };
+  const hardErr = hardValidate(parsed.data);
+  if (hardErr) return { error: hardErr };
   const ctx = await requireMember(["owner", "admin", "agent"]);
   if ("error" in ctx) return { error: ctx.error };
   const { data, error } = await ctx.supabase
@@ -187,6 +245,8 @@ export async function updateAutomationAction(
 ): Promise<{ ok?: boolean; error?: string }> {
   const parsed = AutomationSchema.safeParse(input);
   if (!parsed.success) return { error: "Datos inválidos" };
+  const hardErr = hardValidate(parsed.data);
+  if (hardErr) return { error: hardErr };
   const ctx = await requireMember(["owner", "admin", "agent"]);
   if ("error" in ctx) return { error: ctx.error };
   const { error } = await ctx.supabase
