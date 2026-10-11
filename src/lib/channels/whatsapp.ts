@@ -117,7 +117,11 @@ export const whatsappAdapter: ChannelAdapter = {
     // Step 2: send the message with the media_id
     const mediaPayload: Record<string, unknown> = { id: metaMediaId };
     if (args.caption) mediaPayload.caption = args.caption;
-    if (args.filename) mediaPayload.filename = args.filename;
+    // ponytail: Meta only accepts `filename` for `document` type;
+    // image/video/audio/sticker reject it with 400.
+    if (args.mediaType === "document" && args.filename) {
+      mediaPayload.filename = args.filename;
+    }
 
     const sendRes = await graphPost<{ messages: Array<{ id: string }> }>(
       `/${args.fromExternalId}/messages`,
