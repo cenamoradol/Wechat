@@ -34,12 +34,14 @@ export async function evaluateTriggers(event: TriggerEvent): Promise<number> {
   for (const a of automations) {
     const trigger = a.trigger as { type: string; [k: string]: unknown };
 
-    // For ai_classify, evaluate the LLM first
+    // For ai_classify, evaluate the LLM first. The LLM call IS the match
+    // check — no need to re-run matchesTrigger (the event is message_received,
+    // not ai_classify, so the existing matchesTrigger for ai_classify would
+    // never match anyway).
     if (trigger.type === "ai_classify") {
       if (event.kind !== "message_received" || !event.messageText) continue;
       const t = trigger as { type: "ai_classify"; agentId: string; criteria: string };
       if (!t.agentId || !t.criteria) continue;
-      // Look up the agent (we need provider + model)
       const { data: agent } = await admin
         .from("ai_agents")
         .select("id, provider, model, workspace_id")
@@ -48,7 +50,7 @@ export async function evaluateTriggers(event: TriggerEvent): Promise<number> {
       if (!agent) continue;
       try {
         const cls = await classifyMessage({
-          agent: { id: agent.id, workspaceId: agent.workspace_id, provider: agent.provider as "openai" | "anthropic", model: agent.model },
+          agent: { id: agent.id, workspaceId: agent.workspace_id, provider: agent.provider as "openai" | "anthropic" | "minimax", model: agent.model },
           messageText: event.messageText,
           criteria: t.criteria,
         });
@@ -57,7 +59,6 @@ export async function evaluateTriggers(event: TriggerEvent): Promise<number> {
         console.error("ai_classify failed", e);
         continue;
       }
-      if (!matchesTrigger(trigger as never, event)) continue;
     } else {
       if (!matchesTrigger(trigger as never, event)) continue;
     }

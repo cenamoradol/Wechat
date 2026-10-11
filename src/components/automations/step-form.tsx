@@ -21,6 +21,7 @@ type Options = {
   templates: Array<{ id: string; name: string; language: string }>;
   members: Array<{ id: string; full_name: string | null; email: string }>;
   customFields: Array<{ id: string; name: string; type: string }>;
+  aiAgents?: Array<{ id: string; name: string; provider: string; model: string }>;
 };
 
 const STEP_ICONS: Record<Step["type"], React.ComponentType<{ className?: string }>> = {
@@ -331,15 +332,23 @@ function StepFields({ step, options, onChange }: { step: Step; options: Options;
       return (
         <div className="space-y-2">
           <div>
-            <Label>AI Agent ID</Label>
-            <Input
-              value={step.agentId}
-              onChange={(e) => onChange({ ...step, agentId: e.target.value })}
-              placeholder="UUID del agente IA"
-            />
-            <p className="mt-1 text-xs text-amber-600">
-              ⚠️ AI Agents es Fase 7. Este step fallará hasta entonces.
-            </p>
+            <Label>Agente IA</Label>
+            <Select value={step.agentId} onValueChange={(v) => onChange({ ...step, agentId: v })}>
+              <SelectTrigger><SelectValue placeholder="Selecciona agente" /></SelectTrigger>
+              <SelectContent>
+                {(options.aiAgents ?? []).length === 0 ? (
+                  <SelectItem value="__none" disabled>
+                    Crea un agente en /ai-agents primero
+                  </SelectItem>
+                ) : (
+                  options.aiAgents!.map((a) => (
+                    <SelectItem key={a.id} value={a.id}>
+                      {a.name} — <span className="text-muted-foreground">{a.provider}/{a.model}</span>
+                    </SelectItem>
+                  ))
+                )}
+              </SelectContent>
+            </Select>
           </div>
           <div>
             <Label>Mensaje de handoff (opcional)</Label>
@@ -348,6 +357,9 @@ function StepFields({ step, options, onChange }: { step: Step; options: Options;
               onChange={(e) => onChange({ ...step, handoffMessage: e.target.value })}
               placeholder="Te paso con un humano..."
             />
+            <p className="mt-1 text-xs text-muted-foreground">
+              Se envía al contacto si el agente decide transferir a un humano.
+            </p>
           </div>
         </div>
       );
