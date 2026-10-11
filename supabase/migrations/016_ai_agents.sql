@@ -52,6 +52,7 @@ create index if not exists ai_knowledge_docs_agent_idx
 -- 4. ai_messages
 create table if not exists public.ai_messages (
   id uuid primary key default gen_random_uuid(),
+  workspace_id uuid references public.workspaces(id) on delete cascade not null,
   agent_id uuid references public.ai_agents(id) on delete cascade not null,
   conversation_id uuid references public.conversations(id) on delete cascade not null,
   contact_id uuid references public.contacts(id) on delete cascade not null,
