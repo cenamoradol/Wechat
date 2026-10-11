@@ -63,13 +63,17 @@ export async function saveApiKey(
   if (!apiKey || apiKey.length < 10) return { error: "API key inválida" };
   const admin = createAdminClient();
   const enc = encrypt(apiKey);
+  // ponytail: bytea column needs the \\x hex prefix to round-trip cleanly
+  // through postgrest-js. Without it, the Buffer gets stringified as a JSON
+  // object and the bytes get mangled, which then fails GCM auth on read.
+  const encHex = "\\x" + enc.toString("hex");
   const { error } = await admin
     .from("ai_provider_keys")
     .upsert(
       {
         workspace_id: workspaceId,
         provider,
-        api_key_enc: enc as unknown as string,
+        api_key_enc: encHex,
         label: label ?? "default",
         last_used_at: null,
       },
