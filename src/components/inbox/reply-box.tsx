@@ -41,18 +41,21 @@ export function ReplyBox({ conversationId }: { conversationId: string }) {
 
   const addFiles = (rawFiles: File[]) => {
     const newFiles: UploadedFile[] = rawFiles.map((f) => {
-      const mediaType = (f.type.startsWith("image/")
+      // ponytail: FileReader/our data-URL regex can't handle MIME params
+      // like `audio/webm;codecs=opus` — strip them so uploads work.
+      const cleanMime = (f.type || "application/octet-stream").split(";")[0].trim();
+      const mediaType = (cleanMime.startsWith("image/")
         ? "image"
-        : f.type.startsWith("video/")
+        : cleanMime.startsWith("video/")
         ? "video"
-        : f.type.startsWith("audio/")
+        : cleanMime.startsWith("audio/")
         ? "audio"
         : "document") as UploadedFile["mediaType"];
       return {
         id: `f-${++fileIdCounter}-${Date.now()}`,
         file: f,
         dataUrl: "",
-        mimeType: f.type,
+        mimeType: cleanMime,
         fileName: f.name,
         sizeBytes: f.size,
         previewUrl: URL.createObjectURL(f),

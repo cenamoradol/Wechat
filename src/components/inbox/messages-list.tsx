@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/browser";
 import { cn } from "@/lib/utils";
 import { markAsReadAction } from "@/app/(workspace)/inbox/actions";
+import { MediaBubble } from "./media/media-bubble";
 
 type Message = {
   id: string;
@@ -15,6 +16,10 @@ type Message = {
   external_id?: string | null;
   read_at?: string | null;
   sent_by?: string | null;
+  media_url?: string | null;
+  media_mime?: string | null;
+  media_filename?: string | null;
+  media_size_bytes?: number | null;
   // Profile of the agent who sent the message (only present for outbound)
   profiles?: { full_name: string | null; email: string | null } | null;
 };
@@ -39,6 +44,9 @@ function MessageBubble({ message }: { message: Message }) {
   const isUnread = !isOut && !message.read_at;
   const senderLabel = getSenderLabel(message);
   const senderInitial = senderLabel?.trim().charAt(0).toUpperCase();
+  const hasMedia =
+    message.media_url != null ||
+    ["image", "video", "audio", "document", "sticker"].includes(message.type);
   return (
     <div className={`flex gap-2 ${isOut ? "justify-end" : "justify-start"}`}>
       {!isOut && (
@@ -57,19 +65,35 @@ function MessageBubble({ message }: { message: Message }) {
         )}
         <div
           className={cn(
-            "rounded-2xl px-3 py-2 text-sm shadow-sm transition-colors",
+            "rounded-2xl text-sm shadow-sm transition-colors",
+            hasMedia ? "p-1" : "px-3 py-2",
             isOut
               ? "rounded-br-sm bg-primary text-primary-foreground"
               : "rounded-bl-sm bg-background",
-            isUnread && "ring-2 ring-blue-400/70 font-medium",
+            isUnread && "ring-2 ring-blue-400/70",
           )}
         >
-          <p className="whitespace-pre-wrap break-words">
-            {message.text ?? <em className="opacity-60">[{message.type}]</em>}
-          </p>
+          {hasMedia && (
+            <div className="mb-1">
+              <MediaBubble
+                mediaUrl={message.media_url ?? null}
+                mediaMime={message.media_mime ?? null}
+                mediaFilename={message.media_filename ?? null}
+                mediaSizeBytes={message.media_size_bytes ?? null}
+                type={message.type}
+                isOut={isOut}
+              />
+            </div>
+          )}
+          {message.text && (
+            <p className={cn("whitespace-pre-wrap break-words", hasMedia && "px-2 pb-1")}>
+              {message.text}
+            </p>
+          )}
           <div
             className={cn(
               "mt-1 flex items-center justify-end gap-1 text-[10px]",
+              hasMedia ? "px-2 pb-1" : "",
               isOut ? "text-primary-foreground/70" : "text-muted-foreground",
             )}
           >
