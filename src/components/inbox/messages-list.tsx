@@ -3,8 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/browser";
 import { cn } from "@/lib/utils";
-import { markAsReadAction } from "@/app/(workspace)/inbox/actions";
+import { markAsReadAction, resendMediaMessageAction } from "@/app/(workspace)/inbox/actions";
 import { MediaBubble } from "./media/media-bubble";
+import { toast } from "sonner";
 
 type Message = {
   id: string;
@@ -24,9 +25,23 @@ type Message = {
   profiles?: { full_name: string | null; email: string | null } | null;
 };
 
-function OutStatus({ status, isRead }: { status: string | null | undefined; isRead: boolean }) {
+function OutStatus({ status, isRead, onResend }: { status: string | null | undefined; isRead: boolean; onResend?: () => void }) {
   if (isRead) return <span className="text-sky-300">✓✓</span>;
-  if (status === "failed") return <span className="text-red-300">✕</span>;
+  if (status === "failed") {
+    return (
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          onResend?.();
+        }}
+        title="Click para reenviar"
+        className="rounded bg-red-500/20 px-1 text-[10px] font-medium text-red-300 hover:bg-red-500/30"
+      >
+        ✕ reenviar
+      </button>
+    );
+  }
   if (status === "delivered") return <span>✓✓</span>;
   return <span>✓</span>;
 }
@@ -38,7 +53,7 @@ function getSenderLabel(m: Message): string | null {
   return null;
 }
 
-function MessageBubble({ message }: { message: Message }) {
+function MessageBubble({ message, onResend }: { message: Message; onResend?: (id: string) => void }) {
   const isOut = message.direction === "out";
   const isRead = isOut && !!message.read_at;
   const isUnread = !isOut && !message.read_at;
@@ -104,7 +119,17 @@ function MessageBubble({ message }: { message: Message }) {
                 timeZone: typeof window === "undefined" ? "UTC" : undefined,
               })}
             </time>
-            {isOut && <OutStatus status={message.status} isRead={isRead} />}
+            {isOut && (
+              <OutStatus
+                status={message.status}
+                isRead={isRead}
+                onResend={
+                  message.status === "failed" && message.media_url
+                    ? () => onResend?.(message.id)
+                    : undefined
+                }
+              />
+            )}
           </div>
         </div>
       </div>
@@ -161,6 +186,22 @@ export function MessagesList({
       );
     });
   }, [conversationId, messages]);
+
+  const handleResend = async (messageId: string) => {
+    setMessages((prev) =>
+      prev.map((m) => (m.id === messageId ? { ...m, status: "sending" } : m)),
+    );
+    const res = await resendMediaMessageAction(messageId);
+    if (res.error) {
+      toast.error(res.error);
+      setMessages((prev) =>
+        prev.map((m) => (m.id === messageId ? { ...m, status: "failed" } : m)),
+      );
+    } else {
+      toast.success("Reenviado");
+      // Realtime will pick up the status change shortly.
+    }
+  };
 
   // Polling fallback (always runs as a safety net)
   useEffect(() => {
@@ -273,7 +314,7 @@ export function MessagesList({
         className="h-full overflow-y-auto p-4 space-y-2 bg-muted/20"
       >
         {messages.map((m) => (
-          <MessageBubble key={m.id} message={m} />
+          <MessageBubble key={m.id} message={m} onResend={handleResend} />
         ))}
       </div>
       <div className="pointer-events-none absolute right-2 bottom-2 text-[10px] text-muted-foreground">

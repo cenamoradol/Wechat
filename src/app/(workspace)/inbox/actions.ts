@@ -354,6 +354,63 @@ function formatBytes(n: number): string {
   return `${(n / 1024 / 1024 / 1024).toFixed(2)} GB`;
 }
 
+/**
+ * Re-fetch a previously-sent media file from Supabase Storage and resend it
+ * to the same contact via the same channel. Used when Meta's webhook reports
+ * status="failed" (e.g. delivery failure we can retry).
+ */
+export async function resendMediaMessageAction(messageId: string): Promise<SendMediaResult> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Unauthorized" };
+  const admin = createAdminClient();
+
+  const { data: msg, error: msgErr } = await admin
+    .from("messages")
+    .select("id, conversation_id, type, text, media_url, media_mime, media_filename, media_size_bytes, media_meta_id, direction")
+    .eq("id", messageId)
+    .single();
+  if (msgErr || !msg) return { error: "Mensaje no encontrado" };
+  if (msg.direction !== "out") return { error: "Solo se pueden reenviar mensajes enviados" };
+  if (!msg.media_url) return { error: "Este mensaje no tiene media" };
+
+  // Re-extract the storage path from the public URL and download the file
+  // through the admin client.
+  const m = msg.media_url.match(/\/storage\/v1\/(?:object|render)\/(?:public|sign)\/media\/(.+?)(?:\?|$)/);
+  if (!m) return { error: "No se pudo obtener el archivo original" };
+  const storagePath = m[1];
+
+  const { data: blob, error: dlErr } = await admin.storage.from("media").download(storagePath);
+  if (dlErr || !blob) return { error: "Archivo no disponible en storage" };
+
+  // Look up channel + token
+  const ctx = await getChannelContext(admin, msg.conversation_id);
+  if ("error" in ctx) return { error: ctx.error };
+
+  // Send through the adapter
+  const adapter = getAdapter(ctx.channelType);
+  try {
+    const sendResult = await adapter.sendMedia({
+      accessToken: ctx.token,
+      fromExternalId: ctx.channelFromId,
+      toExternalId: ctx.contactExternalId,
+      text: msg.text ?? "",
+      file: ctx.channelType === "whatsapp" ? blob : undefined,
+      mediaUrl: ctx.channelType !== "whatsapp" ? msg.media_url : undefined,
+      mediaType: msg.type as "image" | "video" | "audio" | "document",
+      caption: msg.text ?? undefined,
+      filename: msg.media_filename ?? undefined,
+    });
+    await admin
+      .from("messages")
+      .update({ external_id: sendResult.externalId, status: "sent" })
+      .eq("id", msg.id);
+    return { ok: true, messageId: msg.id };
+  } catch (e) {
+    return { error: `Reenvío falló: ${(e as Error).message}` };
+  }
+}
+
 export async function markAsReadAction(conversationId: string): Promise<void> {
   const supabase = await createClient();
   const {

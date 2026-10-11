@@ -325,6 +325,7 @@ export type Database = {
           deleted_at?: string | null;
         };
         Update: Partial<{
+          external_id: string | null;
           status: string;
           error_code: string | null;
           error_message: string | null;
