@@ -145,6 +145,14 @@ function validateStep(s: { type: string; [k: string]: unknown }): string | null 
     case "ai_reply":
       if (!String(s.agentId ?? "").trim()) return "agentId requerido";
       return null;
+    case "ai_extract": {
+      if (!String(s.agentId ?? "").trim()) return "agentId requerido";
+      if (!String(s.instruction ?? "").trim()) return "instrucción requerida";
+      const fields = (s.fields as Array<{ name?: string }> | undefined) ?? [];
+      if (fields.length === 0) return "al menos un campo a extraer";
+      if (fields.some((f) => !String(f.name ?? "").trim())) return "todos los campos necesitan nombre";
+      return null;
+    }
     case "branch":
       if (!String((s.if as { value?: string })?.value ?? "").trim()) return "if.value requerido";
       return null;
