@@ -117,13 +117,18 @@ export const whatsappAdapter: ChannelAdapter = {
     );
     if (!uploadRes.ok) {
       const err = await uploadRes.text();
-      throw new Error(`WhatsApp media upload failed (${uploadRes.status}): ${err.slice(0, 200)}`);
+      throw new Error(`WhatsApp media upload failed (${uploadRes.status}): ${err.slice(0, 300)}`);
     }
     const { id: metaMediaId } = (await uploadRes.json()) as { id: string };
+    console.log(`[wa] uploaded media_id=${metaMediaId} type=${args.mediaType} mime=${args.file.type} name=${fileName}`);
 
     // Step 2: send the message with the media_id
     const mediaPayload: Record<string, unknown> = { id: metaMediaId };
-    if (args.caption) mediaPayload.caption = args.caption;
+    // ponytail: WA rejects `caption` on audio type with 400. Only
+    // image/video/document accept captions.
+    if (args.caption && args.mediaType !== "audio") {
+      mediaPayload.caption = args.caption;
+    }
     // ponytail: Meta only accepts `filename` for `document` type;
     // image/video/audio/sticker reject it with 400.
     if (args.mediaType === "document" && args.filename) {
