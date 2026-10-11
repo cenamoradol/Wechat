@@ -374,6 +374,101 @@ export type Database = {
         }>;
         Relationships: [];
       };
+      tags: {
+        Row: { id: string; workspace_id: string; name: string; color: string; created_at: string };
+        Insert: { workspace_id: string; name: string; color?: string };
+        Update: Partial<{ name: string; color: string }>;
+        Relationships: [];
+      };
+      contact_tags: {
+        Row: { contact_id: string; tag_id: string };
+        Insert: { contact_id: string; tag_id: string };
+        Update: Partial<{ contact_id: string; tag_id: string }>;
+        Relationships: [];
+      };
+      custom_field_defs: {
+        Row: { id: string; workspace_id: string; name: string; type: string; options: string[] | null; created_at: string };
+        Insert: { workspace_id: string; name: string; type: "text" | "number" | "date" | "select" | "boolean"; options?: string[] | null };
+        Update: Partial<{ name: string; type: string; options: string[] | null }>;
+        Relationships: [];
+      };
+      custom_field_values: {
+        Row: { contact_id: string; field_id: string; value: string };
+        Insert: { contact_id: string; field_id: string; value: string };
+        Update: Partial<{ value: string }>;
+        Relationships: [];
+      };
+      automations: {
+        Row: {
+          id: string;
+          workspace_id: string;
+          name: string;
+          description: string | null;
+          trigger: Record<string, unknown>;
+          steps: unknown[];
+          status: "active" | "paused" | "draft";
+          created_by: string | null;
+          last_run_at: string | null;
+          run_count: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          workspace_id: string;
+          name: string;
+          description?: string | null;
+          trigger: Record<string, unknown>;
+          steps: unknown[];
+          status?: "active" | "paused" | "draft";
+          created_by?: string | null;
+        };
+        Update: Partial<{
+          name: string;
+          description: string | null;
+          trigger: Record<string, unknown>;
+          steps: unknown[];
+          status: "active" | "paused" | "draft";
+          last_run_at: string | null;
+          run_run_count: number;
+          updated_at: string;
+        }>;
+        Relationships: [];
+      };
+      automation_runs: {
+        Row: {
+          id: string;
+          automation_id: string;
+          workspace_id: string;
+          conversation_id: string | null;
+          contact_id: string | null;
+          status: "pending" | "running" | "succeeded" | "failed" | "cancelled";
+          current_step: number;
+          log: unknown[];
+          trigger_data: Record<string, unknown>;
+          scheduled_at: string | null;
+          started_at: string;
+          completed_at: string | null;
+        };
+        Insert: {
+          automation_id: string;
+          workspace_id: string;
+          conversation_id?: string | null;
+          contact_id?: string | null;
+          status?: "pending" | "running" | "succeeded" | "failed" | "cancelled";
+          current_step?: number;
+          log?: unknown[];
+          trigger_data?: Record<string, unknown>;
+          scheduled_at?: string | null;
+        };
+        Update: Partial<{
+          status: "pending" | "running" | "succeeded" | "failed" | "cancelled";
+          current_step: number;
+          log: unknown[];
+          scheduled_at: string | null;
+          completed_at: string | null;
+        }>;
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: {

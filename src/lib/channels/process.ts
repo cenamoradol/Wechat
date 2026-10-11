@@ -2,6 +2,7 @@ import type { NormalizedMessage } from "@/lib/channels/types";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { decrypt } from "@/lib/crypto";
 import { downloadAndStoreMedia } from "@/lib/channels/download";
+import { evaluateTriggers } from "@/lib/automations/engine";
 
 // Process inbound: upsert contact + contact_channel + conversation + insert message
 // All writes use service_role (admin) to bypass RLS — webhooks have no user session.
@@ -202,7 +203,21 @@ export async function processInbound(m: NormalizedMessage): Promise<void> {
       processed: false,
       error: msgErr.message,
     });
+    return;
   }
+
+  // 7. Fire automations whose trigger matches this inbound message.
+  await evaluateTriggers({
+    kind: "message_received",
+    workspaceId: channel.workspace_id,
+    conversationId: conv.id,
+    contactId,
+    contactChannelId: cc.id,
+    channelId: channel.id,
+    channelType: m.channelType,
+    messageText: m.text ?? null,
+    messageId: m.messageExternalId,
+  }).catch((e) => console.error("evaluateTriggers failed", e));
 }
 
 /**
