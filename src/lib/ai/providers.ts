@@ -6,6 +6,17 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { decrypt, encrypt } from "@/lib/crypto";
 import type { AIProvider } from "./types";
 
+/**
+ * Per-provider config. Minimax is OpenAI-compatible (chat/completions
+ * endpoint with messages array), so the request shape is identical to
+ * OpenAI. The base URL is the only thing that differs.
+ */
+export const PROVIDER_CONFIG: Record<AIProvider, { baseUrl: string; testModel: string; format: "openai" | "anthropic" }> = {
+  openai: { baseUrl: "https://api.openai.com/v1", testModel: "gpt-4o-mini", format: "openai" },
+  anthropic: { baseUrl: "https://api.anthropic.com", testModel: "claude-3-5-haiku-latest", format: "anthropic" },
+  minimax: { baseUrl: "https://api.minimaxi.com/v1", testModel: "MiniMax-M3", format: "openai" },
+};
+
 export async function getApiKey(
   workspaceId: string,
   provider: AIProvider,
@@ -84,9 +95,11 @@ export async function pingProvider(
   apiKey: string,
   model: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
+  const cfg = PROVIDER_CONFIG[provider];
   try {
-    if (provider === "openai") {
-      const res = await fetch("https://api.openai.com/v1/chat/completions", {
+    if (cfg.format === "openai") {
+      // OpenAI and Minimax share the OpenAI chat completions shape.
+      const res = await fetch(`${cfg.baseUrl}/chat/completions`, {
         method: "POST",
         headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -97,11 +110,11 @@ export async function pingProvider(
       });
       if (!res.ok) {
         const txt = await res.text();
-        return { ok: false, error: `OpenAI ${res.status}: ${txt.slice(0, 200)}` };
+        return { ok: false, error: `${provider} ${res.status}: ${txt.slice(0, 200)}` };
       }
       return { ok: true };
     } else {
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
+      const res = await fetch(`${cfg.baseUrl}/v1/messages`, {
         method: "POST",
         headers: {
           "x-api-key": apiKey,

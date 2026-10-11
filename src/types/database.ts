@@ -475,7 +475,7 @@ export type Database = {
           workspace_id: string;
           name: string;
           description: string | null;
-          provider: "openai" | "anthropic";
+          provider: "openai" | "anthropic" | "minimax";
           model: string;
           system_prompt: string;
           temperature: number;
@@ -492,7 +492,7 @@ export type Database = {
           workspace_id: string;
           name: string;
           description?: string | null;
-          provider: "openai" | "anthropic";
+          provider: "openai" | "anthropic" | "minimax";
           model: string;
           system_prompt: string;
           temperature?: number;
@@ -506,7 +506,7 @@ export type Database = {
         Update: Partial<{
           name: string;
           description: string | null;
-          provider: "openai" | "anthropic";
+          provider: "openai" | "anthropic" | "minimax";
           model: string;
           system_prompt: string;
           temperature: number;
@@ -584,7 +584,7 @@ export type Database = {
         Row: {
           id: string;
           workspace_id: string;
-          provider: "openai" | "anthropic";
+          provider: "openai" | "anthropic" | "minimax";
           api_key_enc: string;
           label: string | null;
           last_used_at: string | null;
@@ -592,7 +592,7 @@ export type Database = {
         };
         Insert: {
           workspace_id: string;
-          provider: "openai" | "anthropic";
+          provider: "openai" | "anthropic" | "minimax";
           api_key_enc: string;
           label?: string | null;
           last_used_at?: string | null;

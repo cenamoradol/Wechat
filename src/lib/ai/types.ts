@@ -1,6 +1,6 @@
 // src/lib/ai/types.ts
 
-export type AIProvider = "openai" | "anthropic";
+export type AIProvider = "openai" | "anthropic" | "minimax";
 
 export type AIAgent = {
   id: string;

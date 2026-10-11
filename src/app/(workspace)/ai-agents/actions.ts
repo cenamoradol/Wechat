@@ -15,7 +15,7 @@ import type { AIProvider } from "@/lib/ai/types";
 const AgentSchema = z.object({
   name: z.string().min(1).max(120),
   description: z.string().max(2000).optional(),
-  provider: z.enum(["openai", "anthropic"]),
+  provider: z.enum(["openai", "anthropic", "minimax"]),
   model: z.string().min(1).max(100),
   system_prompt: z.string().min(1).max(20_000),
   temperature: z.number().min(0).max(2),
@@ -223,7 +223,7 @@ export { pingProvider };
 // ---------------- API Keys (workspace-aware wrappers) ----------------
 
 export async function saveApiKeyAction(
-  provider: "openai" | "anthropic",
+  provider: "openai" | "anthropic" | "minimax",
   apiKey: string,
 ): Promise<{ error?: string }> {
   const ctx = await requireMember();
@@ -232,7 +232,7 @@ export async function saveApiKeyAction(
 }
 
 export async function deleteApiKeyAction(
-  provider: "openai" | "anthropic",
+  provider: "openai" | "anthropic" | "minimax",
 ): Promise<{ error?: string }> {
   const ctx = await requireMember();
   if ("error" in ctx) return { error: ctx.error };

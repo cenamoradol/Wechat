@@ -13,11 +13,12 @@ import {
   pingProvider,
 } from "@/app/(workspace)/ai-agents/actions";
 
-type Provider = "openai" | "anthropic";
+type Provider = "openai" | "anthropic" | "minimax";
 
 const PROVIDERS: Array<{ id: Provider; name: string; helpUrl: string; placeholder: string; testModel: string }> = [
   { id: "openai", name: "OpenAI", helpUrl: "https://platform.openai.com/api-keys", placeholder: "sk-...", testModel: "gpt-4o-mini" },
   { id: "anthropic", name: "Anthropic", helpUrl: "https://console.anthropic.com/settings/keys", placeholder: "sk-ant-...", testModel: "claude-3-5-haiku-latest" },
+  { id: "minimax", name: "Minimax", helpUrl: "https://api.minimaxi.com/", placeholder: "sk-cp-...", testModel: "MiniMax-M3" },
 ];
 
 type Props = {
