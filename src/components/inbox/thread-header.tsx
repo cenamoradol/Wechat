@@ -45,7 +45,8 @@ export function ThreadHeader({
   const [showDelete, setShowDelete] = useState(false);
   const [confirmText, setConfirmText] = useState("");
 
-  const isManager = userRole === "owner" || userRole === "admin";
+  // Owner, admin, AND agent can archive/unarchive. Only owner can delete.
+  const canArchive = userRole === "owner" || userRole === "admin" || userRole === "agent";
   const canDelete = userRole === "owner";
 
   const onArchiveToggle = () => {
@@ -86,7 +87,7 @@ export function ThreadHeader({
           <h2 className="truncate text-sm font-semibold">{contactDisplay}</h2>
           <p className="text-xs text-muted-foreground">{channelLabel}</p>
         </div>
-        {isManager && (
+        {canArchive && (
           <Button
             variant="ghost"
             size="icon"
@@ -101,7 +102,7 @@ export function ThreadHeader({
             )}
           </Button>
         )}
-        {isManager && (
+        {(canArchive || canDelete) && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon" disabled={isPending}>
@@ -109,19 +110,21 @@ export function ThreadHeader({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={onArchiveToggle}>
-                {isArchived ? (
-                  <>
-                    <ArchiveRestore className="mr-2 h-4 w-4" />
-                    Desarchivar
-                  </>
-                ) : (
-                  <>
-                    <Archive className="mr-2 h-4 w-4" />
-                    Archivar
-                  </>
-                )}
-              </DropdownMenuItem>
+              {canArchive && (
+                <DropdownMenuItem onClick={onArchiveToggle}>
+                  {isArchived ? (
+                    <>
+                      <ArchiveRestore className="mr-2 h-4 w-4" />
+                      Desarchivar
+                    </>
+                  ) : (
+                    <>
+                      <Archive className="mr-2 h-4 w-4" />
+                      Archivar
+                    </>
+                  )}
+                </DropdownMenuItem>
+              )}
               {canDelete && (
                 <DropdownMenuItem
                   onClick={() => setShowDelete(true)}

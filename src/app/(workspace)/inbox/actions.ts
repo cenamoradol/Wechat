@@ -223,7 +223,8 @@ async function requireMemberForConversation(
 export async function archiveConversationAction(
   conversationId: string,
 ): Promise<ArchiveActionResult> {
-  const ctx = await requireMemberForConversation(conversationId, ["owner", "admin"]);
+  // Owner, admin, AND agent can archive. Viewers cannot.
+  const ctx = await requireMemberForConversation(conversationId, ["owner", "admin", "agent"]);
   if ("error" in ctx) return { error: ctx.error };
 
   const admin = createAdminClient();
@@ -258,7 +259,8 @@ export async function archiveConversationAction(
 export async function unarchiveConversationAction(
   conversationId: string,
 ): Promise<ArchiveActionResult> {
-  const ctx = await requireMemberForConversation(conversationId, ["owner", "admin"]);
+  // Same as archive: owner, admin, agent.
+  const ctx = await requireMemberForConversation(conversationId, ["owner", "admin", "agent"]);
   if ("error" in ctx) return { error: ctx.error };
 
   const admin = createAdminClient();
