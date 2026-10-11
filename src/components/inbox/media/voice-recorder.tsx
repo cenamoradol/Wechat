@@ -1,11 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Mic, Square, X } from "lucide-react";
+import { Mic, Square, X, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { transcodeToMp3 } from "@/lib/audio/transcode";
+import { toast } from "sonner";
 
-type State = "idle" | "recording" | "stopped" | "unsupported";
+type State = "idle" | "recording" | "transcoding" | "error";
 
 export function VoiceRecorder({
   onRecorded,
@@ -22,10 +24,9 @@ export function VoiceRecorder({
   const startTsRef = useRef(0);
 
   useEffect(() => {
-    // Check browser support
     if (typeof window !== "undefined") {
       if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
-        setState("unsupported");
+        setState("error");
       }
     }
     return () => {
@@ -37,13 +38,11 @@ export function VoiceRecorder({
   }, []);
 
   const start = async () => {
-    if (state === "unsupported") return;
+    if (state === "error") return;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      // ponytail: prefer audio/mp4 (Safari + WhatsApp friendly). Chrome
-      // records webm; for those we fall back, and the server action will
-      // reject the upload with a clear error telling the user to use
-      // Safari or upload an audio file.
+      // ponytail: prefer audio/mp4 (Safari + WhatsApp friendly).
+      // Chrome records webm; we transcode to mp3 after recording.
       const mime = MediaRecorder.isTypeSupported("audio/mp4;codecs=mp4a.40.2")
         ? "audio/mp4;codecs=mp4a.40.2"
         : MediaRecorder.isTypeSupported("audio/mp4")
@@ -59,14 +58,32 @@ export function VoiceRecorder({
       recorder.ondataavailable = (e) => {
         if (e.data && e.data.size > 0) chunksRef.current.push(e.data);
       };
-      recorder.onstop = () => {
+      recorder.onstop = async () => {
         stream.getTracks().forEach((t) => t.stop());
         const blob = new Blob(chunksRef.current, { type: mime });
-        // Use a sensible filename. Browsers don't expose the original mic name.
-        const ext = mime.includes("mp4") ? "m4a" : "webm";
-        const file = new File([blob], `voice-${Date.now()}.${ext}`, { type: mime });
-        onRecorded(file);
-        setState("idle");
+        const isAlreadyMp3 = mime.startsWith("audio/mp4") || mime.startsWith("audio/mpeg");
+        const ext = mime.includes("mp4") ? "m4a" : mime.includes("mpeg") ? "mp3" : "webm";
+        const rawName = `voice-${Date.now()}.${ext}`;
+
+        if (isAlreadyMp3) {
+          const file = new File([blob], rawName, { type: mime.split(";")[0] });
+          onRecorded(file);
+          setState("idle");
+          return;
+        }
+
+        // Chrome (or other webm/ogg) — transcode to mp3 for WhatsApp.
+        setState("transcoding");
+        try {
+          const mp3 = await transcodeToMp3(blob);
+          const file = new File([mp3], rawName.replace(/\.[a-z0-9]+$/i, ".mp3"), { type: "audio/mpeg" });
+          onRecorded(file);
+          setState("idle");
+        } catch (e) {
+          console.error("transcode failed", e);
+          toast.error("No se pudo procesar el audio. Intenta de nuevo o sube un mp3/m4a.");
+          setState("error");
+        }
       };
       recorder.start();
       startTsRef.current = Date.now();
@@ -76,7 +93,8 @@ export function VoiceRecorder({
       }, 250);
     } catch (e) {
       console.error("voiceRecorder: getUserMedia failed", e);
-      setState("idle");
+      toast.error("No se pudo acceder al micrófono");
+      setState("error");
     }
   };
 
@@ -89,7 +107,6 @@ export function VoiceRecorder({
 
   const cancel = () => {
     if (recorderRef.current && recorderRef.current.state === "recording") {
-      // Discard the recording by stopping and overriding onstop
       recorderRef.current.onstop = null;
       recorderRef.current.stop();
     }
@@ -105,13 +122,21 @@ export function VoiceRecorder({
     }
   };
 
-  if (state === "unsupported") return null;
+  if (state === "error") {
+    return (
+      <div className="flex items-center gap-2 rounded-md border bg-muted/30 px-2 py-1.5 text-xs text-muted-foreground">
+        <Mic className="h-3.5 w-3.5" />
+        <span>Micrófono no disponible. Sube un mp3 o m4a.</span>
+      </div>
+    );
+  }
 
   return (
     <div
       className={cn(
         "flex items-center gap-2 rounded-md border bg-red-50 px-2 py-1",
         state === "recording" && "ring-2 ring-red-400",
+        state === "transcoding" && "ring-2 ring-amber-400",
       )}
     >
       {state === "idle" && (
@@ -137,6 +162,12 @@ export function VoiceRecorder({
           <Button type="button" variant="ghost" size="icon" onClick={cancel} title="Cancelar">
             <X className="h-4 w-4" />
           </Button>
+        </>
+      )}
+      {state === "transcoding" && (
+        <>
+          <Loader2 className="h-3.5 w-3.5 animate-spin text-amber-600" />
+          <span className="text-xs">Convirtiendo a MP3 (primera vez puede tardar ~10s)…</span>
         </>
       )}
     </div>
