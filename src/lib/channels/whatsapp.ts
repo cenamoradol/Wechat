@@ -94,10 +94,17 @@ export const whatsappAdapter: ChannelAdapter = {
     }
 
     // Step 1: upload the file to Meta to get a media_id
+    // ponytail: WA rejects uploads without a filename (the file part must
+    // include a name with the right extension). Wrap the blob in a File
+    // and use FormData's third arg to set the filename.
+    const fileName = args.filename ?? `audio.${args.mediaType === "audio" ? "mp3" : args.mediaType === "image" ? "jpg" : "mp4"}`;
+    const filePart = args.file instanceof File
+      ? args.file
+      : new File([args.file], fileName, { type: args.file.type });
     const form = new FormData();
     form.append("messaging_product", "whatsapp");
     form.append("type", args.mediaType);
-    form.append("file", args.file);
+    form.append("file", filePart, fileName);
 
     const uploadRes = await fetch(
       `https://graph.facebook.com/v22.0/${args.fromExternalId}/media`,
