@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { KeyRound, Eye, EyeOff, Trash2, Check, X, Loader2 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -37,6 +38,7 @@ export function AIKeysForm({ initial }: Props) {
 }
 
 function ProviderCard({ provider, configured, lastUsed }: { provider: typeof PROVIDERS[number]; configured: boolean; lastUsed: string | null }) {
+  const router = useRouter();
   const [draft, setDraft] = useState("");
   const [show, setShow] = useState(false);
   const [editing, setEditing] = useState(!configured);
@@ -45,7 +47,6 @@ function ProviderCard({ provider, configured, lastUsed }: { provider: typeof PRO
   const save = () => {
     if (!draft.trim()) return;
     start(async () => {
-      // 1) Ping first to fail fast on invalid keys
       const ping = await pingProvider(provider.id, draft.trim(), provider.testModel);
       if (!ping.ok) {
         toast.error(`API key inválida: ${ping.error}`);
@@ -59,6 +60,9 @@ function ProviderCard({ provider, configured, lastUsed }: { provider: typeof PRO
       toast.success(`${provider.name} guardada y verificada`);
       setDraft("");
       setEditing(false);
+      // ponytail: re-fetch server data so `configured` flips to true and the
+      // form shows the "Configurada" state instead of an empty input.
+      router.refresh();
     });
   };
 
@@ -70,6 +74,7 @@ function ProviderCard({ provider, configured, lastUsed }: { provider: typeof PRO
       else {
         toast.success("Eliminada");
         setEditing(true);
+        router.refresh();
       }
     });
   };
