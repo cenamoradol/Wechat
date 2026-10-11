@@ -58,6 +58,11 @@ create index on public.ai_messages(conversation_id, created_at);
 create index on public.ai_messages(agent_id, created_at desc);
 
 -- FK pendiente
+-- ponytail: conversations.ai_agent_id was in the plan but not in migration 005.
+-- Add the column first, then the FK.
+alter table public.conversations
+  add column if not exists ai_agent_id uuid;
+
 do $$
 begin
   if not exists (
@@ -69,6 +74,9 @@ begin
       foreign key (ai_agent_id) references public.ai_agents(id) on delete set null;
   end if;
 end $$;
+
+create index if not exists conversations_ai_agent_idx
+  on public.conversations(ai_agent_id) where ai_agent_id is not null;
 
 -- Encrypted API keys (per-workspace BYOK)
 create table public.ai_provider_keys (
