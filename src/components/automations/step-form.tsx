@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { ChevronDown, ChevronUp, Trash2, AlertCircle, Plus, X, GripVertical, MessageSquare, Tag, Clock, Send, GitBranch, UserCheck, Webhook, Sparkles, FileText, Hash, XCircle, CheckSquare } from "lucide-react";
+import { ChevronDown, ChevronUp, Trash2, AlertCircle, Plus, X, GripVertical, MessageSquare, Tag, Clock, Send, GitBranch, UserCheck, Webhook, Sparkles, FileText, Hash, XCircle, CheckSquare, Image as ImageIcon, Filter, Bot } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -38,6 +38,9 @@ const STEP_ICONS: Record<Step["type"], React.ComponentType<{ className?: string 
   ai_reply: Sparkles,
   ai_extract: Sparkles,
   branch: GitBranch,
+  llm_draft_message: Bot,
+  send_images: ImageIcon,
+  condition: Filter,
 };
 
 const STEP_LABELS: Record<Step["type"], string> = {
@@ -54,6 +57,9 @@ const STEP_LABELS: Record<Step["type"], string> = {
   ai_reply: "Respuesta IA",
   ai_extract: "Extraer variables con IA",
   branch: "Condición",
+  llm_draft_message: "Redactar con IA",
+  send_images: "Enviar imágenes",
+  condition: "Condición (avanzada)",
 };
 
 const STEP_DESCRIPTIONS: Record<Step["type"], string> = {
@@ -70,6 +76,9 @@ const STEP_DESCRIPTIONS: Record<Step["type"], string> = {
   ai_reply: "Generar respuesta con IA",
   ai_extract: "Extraer datos estructurados del mensaje",
   branch: "Bifurcación if/else",
+  llm_draft_message: "El LLM redacta la respuesta usando los datos del run",
+  send_images: "Enviar varias imágenes iterando vars.X[*].Y",
+  condition: "Bifurcación recursiva yes/no con múltiples subjects",
 };
 
 type Props = {
@@ -746,6 +755,9 @@ export function defaultStepFor(t: Step["type"]): Step {
     case "ai_reply": return { type: "ai_reply", agentId: "" };
     case "ai_extract": return { type: "ai_extract", agentId: "", instruction: "", fields: [] };
     case "branch": return { type: "branch", if: { field: "channel", operator: "is", value: "whatsapp" }, then: [] };
+    case "llm_draft_message": return { type: "llm_draft_message", agentId: "", prompt: "" };
+    case "send_images": return { type: "send_images", agentId: "", imagePath: "" };
+    case "condition": return { type: "condition", subject: "vars_value", operand: "", yes: [], no: [] };
   }
 }
 
@@ -781,6 +793,18 @@ export function validateStep(s: Step): string | null {
     }
     case "branch":
       return s.if.value ? null : "valor de condición requerido";
+    case "llm_draft_message":
+      if (!s.agentId) return "agente requerido";
+      if (!s.prompt.trim()) return "prompt requerido";
+      return null;
+    case "send_images":
+      if (!s.imagePath.trim()) return "imagePath requerido (ej: vars.results[*].url)";
+      if (!s.imagePath.includes("[*]")) return "imagePath debe contener [*]";
+      return null;
+    case "condition":
+      if (!s.subject) return "subject requerido";
+      if (s.subject === "vars_value" && !s.operand) return "operand requerido para vars_value";
+      return null;
     case "set_status":
     case "close_conversation":
       return null;

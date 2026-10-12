@@ -1,13 +1,11 @@
 // src/lib/automations/triggers.ts
-// Pure functions: given a Trigger JSON and an event, return true if it matches.
+// triggerMatches(automation, ctx): returns true if the trigger config
+// matches the inbound event. Mirrors wacrm's pattern: a single
+// dispatcher that handles every trigger type the engine supports.
 
 import type { Trigger, TriggerEvent } from "./types";
 
-export function matchesTrigger(trigger: Trigger, event: TriggerEvent): boolean {
-  // ponytail: TS doesn't narrow the discriminator across the function
-  // boundary. Use event.kind to dispatch and assert the trigger type.
-  // Schedule triggers are not event-driven (cron evaluates them) so
-  // they don't appear in TriggerEvent.
+export function triggerMatches(trigger: Trigger, event: TriggerEvent): boolean {
   if (event.kind === "message_received" && trigger.type === "message_received") {
     return matchesMessageReceived(trigger, event.messageText, event.channelType);
   }

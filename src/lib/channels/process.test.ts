@@ -1,7 +1,7 @@
 import { expect, it, vi } from "vitest";
 
 const { evaluateTriggers, createAdminClient } = vi.hoisted(() => ({
-  evaluateTriggers: vi.fn().mockResolvedValue(1),
+  evaluateTriggers: vi.fn().mockResolvedValue({ matched: 1, messagesSent: 0 }),
   createAdminClient: vi.fn(),
 }));
 vi.mock("@/lib/automations/engine", () => ({ evaluateTriggers }));

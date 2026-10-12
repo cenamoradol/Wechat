@@ -89,6 +89,11 @@ const TriggerSchema = z.union([
     agentId: z.string().max(100),
     criteria: z.string().min(1).max(2000),
   }),
+  z.object({
+    type: z.literal("llm_condition"),
+    agentId: z.string().max(100),
+    conditionPrompt: z.string().min(1).max(2000),
+  }),
 ]);
 
 const AutomationSchema = z.object({

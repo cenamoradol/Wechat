@@ -214,7 +214,12 @@ export async function processInbound(m: NormalizedMessage): Promise<void> {
   if (!inserted?.length) return;
 
   // 7. Fire automations whose trigger matches this inbound message.
-  await evaluateTriggers({
+  // ponytail: evaluateTriggers returns `{ matched, messagesSent }` so the
+  // caller can suppress the AI auto-reply when an automation already
+  // replied. Today the webhook doesn't run the agent directly, so the
+  // signal is logged. When auto-reply-on-inbound is added, gate it on
+  // `result.matched === 0` to avoid double-texting the customer.
+  const dispatch = await evaluateTriggers({
     kind: "message_received",
     workspaceId: channel.workspace_id,
     conversationId: conv.id,
@@ -224,7 +229,15 @@ export async function processInbound(m: NormalizedMessage): Promise<void> {
     channelType: m.channelType,
     messageText: m.text ?? null,
     messageId: m.messageExternalId,
-  }).catch((e) => console.error("evaluateTriggers failed", e));
+  }).catch((e) => {
+    console.error("evaluateTriggers failed", e);
+    return { matched: 0, messagesSent: 0 };
+  });
+  if (dispatch.matched > 0) {
+    console.log(
+      `[processInbound] automation matched=${dispatch.matched} conversation=${conv.id} — AI auto-reply will be suppressed once enabled`,
+    );
+  }
 }
 
 /**

@@ -16,13 +16,21 @@ export type Trigger =
   | { type: "tag_added"; tagId: string }
   | { type: "schedule"; cron: string; timezone: string }
   | {
-      // ponytail: AI-powered trigger. The criteria is a natural language
-      // description. The LLM decides if the message matches. Uses the
-      // agent's provider/model but ignores its system prompt.
       type: "ai_classify";
       agentId: string;
       criteria: string;
+    }
+  | {
+      // ponytail: LLM-evaluated natural-language condition. Universal
+      // trigger: the user writes the condition ("precio", "hablar con
+      // humano") and the LLM decides if the message matches. Reuses the
+      // workspace's AI provider. Matches wacrm's `llm_condition` trigger.
+      type: "llm_condition";
+      agentId: string;
+      conditionPrompt: string;
     };
+
+export type ExtractFieldType = "string" | "number" | "boolean";
 
 export type Step =
   | { type: "send_text"; text: string }
@@ -38,17 +46,10 @@ export type Step =
       type: "webhook";
       url: string;
       method: "GET" | "POST" | "PUT" | "DELETE";
-      // ponytail: optional URL query params (only appended for GET/DELETE
-      // since the body is the standard place for POST/PUT).
       queryParams?: Record<string, string>;
       headers?: Record<string, string>;
       body?: Record<string, unknown>;
-      // ponytail: name of the var to store the response body under.
-      // Default "response". Use {{vars.response.X}} in later steps.
       saveAs?: string;
-      // ponytail: pull specific fields out of the JSON response and store
-      // them at the top level of vars (e.g. {name: "orderId", path: "data.id"}
-      // lets you write {{vars.orderId}} later).
       extractFields?: Array<{ name: string; path: string }>;
     }
   | {
@@ -57,20 +58,56 @@ export type Step =
       handoffMessage?: string;
     }
   | {
-      // ponytail: extract structured data from a message into named vars.
-      // The LLM is told the field schema and returns a JSON object. Each
-      // field lands at vars.<name> so subsequent webhook steps can use
-      // {{vars.marca}}, {{vars.modelo}}, etc.
       type: "ai_extract";
       agentId: string;
-      instruction: string; // e.g., "Extrae marca, modelo y año del vehículo"
-      fields: Array<{ name: string; type: "string" | "number" | "boolean" }>;
+      instruction: string;
+      fields: Array<{ name: string; type: ExtractFieldType }>;
+      // ponytail: optional reference vocabulary path. Resolved against
+      // ctx.vars at runtime; the rendered text is injected into the
+      // prompt so the LLM can match the customer's mention against
+      // canonical values from a prior webhook (e.g. catalog brands).
+      referencePath?: string;
     }
   | {
       type: "branch";
       if: { field: "tag" | "channel" | "status"; operator: "has" | "equals" | "is"; value: string };
       then: Step[];
       else?: Step[];
+    }
+  | {
+      // ponytail: LLM composes the outbound message using current vars
+      // (webhook responses, extracted fields) and the conversation
+      // history, then sends via the channel. Use after data-fetching
+      // steps to turn structured data into a natural reply without
+      // baking a fixed template. Mirrors wacrm's `llm_draft_message`.
+      type: "llm_draft_message";
+      agentId: string;
+      prompt: string;
+    }
+  | {
+      // ponytail: send WhatsApp image messages by iterating a
+      // `vars.X[*].Y` array. Each iteration sends one image with an
+      // optional caption rendered against `loop.*` scope. Mirrors
+      // wacrm's `send_images` step. Limit caps how many are sent in
+      // one run (default 5).
+      type: "send_images";
+      agentId: string;
+      imagePath: string;
+      caption?: string;
+      maxImages?: number;
+    }
+  | {
+      // ponytail: condition step (yes/no branching) with five subjects.
+      // Mirrors wacrm's `condition` step with `subject` discriminator.
+      // Vars-value operator lets you branch on any value in ctx.vars
+      // (including wildcard paths to webhook responses).
+      type: "condition";
+      subject: "tag_presence" | "contact_field" | "message_content" | "time_of_day" | "vars_value";
+      operand?: string;
+      operator?: "is_empty" | "is_not_empty" | "equals" | "not_equals" | "contains";
+      value?: string;
+      yes: Step[];
+      no: Step[];
     };
 
 export type RunStatus = "pending" | "running" | "succeeded" | "failed" | "cancelled";
@@ -156,7 +193,6 @@ export type RunContext = {
 };
 
 export function parseDuration(d: string): number {
-  // Returns duration in milliseconds. Supports "5m" | "30m" | "1h" | "1d".
   const m = /^(\d+)\s*([smhd])$/i.exec(d.trim());
   if (!m) throw new Error(`Invalid duration: ${d}`);
   const n = Number(m[1]);

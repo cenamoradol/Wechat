@@ -30,6 +30,7 @@ const TRIGGER_LABELS: Array<{ value: Trigger["type"]; label: string; description
   { value: "tag_added", label: "Etiqueta añadida", description: "Cuando se etiqueta al contacto" },
   { value: "schedule", label: "Programado (cron)", description: "Corre según horario" },
   { value: "ai_classify", label: "🤖 Clasificar con IA", description: "El LLM decide según un criterio en lenguaje natural" },
+  { value: "llm_condition", label: "🤖 Condición en lenguaje natural", description: "El LLM evalúa una condición contra el mensaje" },
 ];
 
 export function AutomationEditor({ initial }: Props) {
@@ -211,6 +212,8 @@ function defaultTriggerFor(t: Trigger["type"]): Trigger {
       return { type: "schedule", cron: "0 9 * * *", timezone: "America/Tegucigalpa" };
     case "ai_classify":
       return { type: "ai_classify", agentId: "", criteria: "" };
+    case "llm_condition":
+      return { type: "llm_condition", agentId: "", conditionPrompt: "" };
   }
 }
 
