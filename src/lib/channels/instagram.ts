@@ -30,7 +30,7 @@ export const instagramAdapter: ChannelAdapter = {
         const senderId = evt?.sender?.id;
         const recipientId = evt?.recipient?.id; // ig_business_account_id
         const msg = evt?.message;
-        if (!msg) continue;
+        if (!msg || !senderId || senderId === recipientId || msg.is_echo) continue;
         const ts = evt?.timestamp ? new Date(Number(evt.timestamp)) : new Date();
         const id = msg?.mid ?? `ig-${ts.getTime()}`;
         const norm: NormalizedMessage = {

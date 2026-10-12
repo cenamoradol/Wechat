@@ -19,6 +19,10 @@ export const PROVIDER_CONFIG: Record<AIProvider, { baseUrl: string; testModel: s
   // with Authorization: Bearer. MiniMax-M3.1-Flash-Preview is the M Plan /
   // Token Plan model. base_resp.status_code is the success flag.
   minimax: { baseUrl: "https://api.minimax.io", testModel: "MiniMax-M3.1-Flash-Preview", format: "openai" },
+  // ponytail: Google's OpenAI-compatible endpoint uses the same request and
+  // response shape; keep API keys on the server via the existing BYOK flow.
+  gemini: { baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai", testModel: "gemini-2.5-flash-lite", format: "openai" },
+  openrouter: { baseUrl: "https://openrouter.ai/api/v1", testModel: "openai/gpt-4o-mini", format: "openai" },
 };
 
 export async function getApiKey(

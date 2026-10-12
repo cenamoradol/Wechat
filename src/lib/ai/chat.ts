@@ -1,6 +1,5 @@
 // src/lib/ai/chat.ts
-// Main chat function. Sends a conversation to OpenAI / Anthropic /
-// Minimax (Anthropic-style) and returns the generated reply + usage.
+// Main chat function. Sends a conversation to the configured provider.
 
 import { getApiKey, touchApiKey, PROVIDER_CONFIG } from "./providers";
 import { searchKnowledge } from "./knowledge";
@@ -41,7 +40,7 @@ export async function generateAgentReply(args: {
   let reply = "";
   let usage: ChatUsage;
 
-  if (args.agent.provider === "openai" || args.agent.provider === "minimax") {
+  if (args.agent.provider !== "anthropic") {
     const cfg = PROVIDER_CONFIG[args.agent.provider];
     const path = args.agent.provider === "minimax" ? "/v1/chat/completions" : "/chat/completions";
     const res = await fetch(`${cfg.baseUrl}${path}`, {
@@ -119,7 +118,7 @@ export async function generateAgentReply(args: {
  * message matches the given criteria according to the LLM.
  */
 export async function classifyMessage(args: {
-  agent: { id: string; workspaceId: string; provider: "openai" | "anthropic" | "minimax"; model: string; temperature?: number; maxTokens?: number };
+  agent: { id: string; workspaceId: string; provider: AIAgent["provider"]; model: string; temperature?: number; maxTokens?: number };
   messageText: string;
   criteria: string;
 }): Promise<{ matches: boolean; reasoning: string }> {
@@ -138,7 +137,7 @@ Mensaje del usuario: """${args.messageText}"""
 ¿Cumple el criterio?`;
 
   let text = "";
-  if (args.agent.provider === "openai" || args.agent.provider === "minimax") {
+  if (args.agent.provider !== "anthropic") {
     const cfg = PROVIDER_CONFIG[args.agent.provider];
     const path = args.agent.provider === "minimax" ? "/v1/chat/completions" : "/chat/completions";
     const body: Record<string, unknown> = {

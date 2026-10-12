@@ -14,12 +14,14 @@ import {
   pingProvider,
 } from "@/app/(workspace)/ai-agents/actions";
 
-type Provider = "openai" | "anthropic" | "minimax";
+type Provider = "openai" | "anthropic" | "minimax" | "gemini" | "openrouter";
 
 const PROVIDERS: Array<{ id: Provider; name: string; helpUrl: string; placeholder: string; testModel: string }> = [
   { id: "openai", name: "OpenAI", helpUrl: "https://platform.openai.com/api-keys", placeholder: "sk-...", testModel: "gpt-4o-mini" },
   { id: "anthropic", name: "Anthropic", helpUrl: "https://console.anthropic.com/settings/keys", placeholder: "sk-ant-...", testModel: "claude-3-5-haiku-latest" },
   { id: "minimax", name: "Minimax", helpUrl: "https://platform.minimax.io/docs/m-plan/quickstart", placeholder: "sk-cp-...", testModel: "MiniMax-M3.1-Flash-Preview" },
+  { id: "gemini", name: "Google Gemini", helpUrl: "https://aistudio.google.com/app/apikey", placeholder: "AIza...", testModel: "gemini-2.5-flash-lite" },
+  { id: "openrouter", name: "OpenRouter", helpUrl: "https://openrouter.ai/settings/keys", placeholder: "sk-or-v1-...", testModel: "openai/gpt-4o-mini" },
 ];
 
 type Props = {

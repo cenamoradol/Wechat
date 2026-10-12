@@ -7,6 +7,7 @@ import { parseDuration } from "./types";
 import { getAdapter } from "@/lib/channels";
 import { decrypt } from "@/lib/crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
+import type { AIProvider } from "@/lib/ai/types";
 
 function interpolate(template: string, ctx: RunContext): string {
   return template.replace(/\{\{([^}]+)\}\}/g, (_m, expr: string) => {
@@ -250,7 +251,7 @@ export async function runStep(step: Step, ctx: RunContext): Promise<unknown> {
           workspaceId: a.workspace_id,
           name: a.name,
           description: a.description,
-          provider: a.provider as "openai" | "anthropic",
+           provider: a.provider as AIProvider,
           model: a.model,
           systemPrompt: a.system_prompt,
           temperature: Number(a.temperature),
@@ -275,7 +276,7 @@ export async function runStep(step: Step, ctx: RunContext): Promise<unknown> {
           workspaceId: a.workspace_id,
           name: a.name,
           description: a.description,
-          provider: a.provider as "openai" | "anthropic",
+           provider: a.provider as AIProvider,
           model: a.model,
           systemPrompt: a.system_prompt,
           temperature: Number(a.temperature),
@@ -355,7 +356,7 @@ Extrae los campos según las instrucciones del sistema.`;
           workspaceId: a.workspace_id,
           name: a.name,
           description: a.description,
-          provider: a.provider as "openai" | "anthropic" | "minimax",
+           provider: a.provider as AIProvider,
           model: a.model,
           systemPrompt: a.system_prompt,
           temperature: Number(a.temperature),

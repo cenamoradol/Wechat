@@ -20,7 +20,7 @@ import {
   type AgentFormData,
 } from "@/app/(workspace)/ai-agents/actions";
 
-const MODELS: Record<"openai" | "anthropic" | "minimax", Array<{ value: string; label: string }>> = {
+const MODELS: Record<AgentFormData["provider"], Array<{ value: string; label: string }>> = {
   openai: [
     { value: "gpt-4o-mini", label: "GPT-4o Mini (rápido, barato)" },
     { value: "gpt-4o", label: "GPT-4o (potente)" },
@@ -38,6 +38,16 @@ const MODELS: Record<"openai" | "anthropic" | "minimax", Array<{ value: string; 
     { value: "MiniMax-M3", label: "MiniMax-M3" },
     { value: "MiniMax-M2.7-highspeed", label: "MiniMax-M2.7-highspeed (rápido)" },
     { value: "MiniMax-M2.5-highspeed", label: "MiniMax-M2.5-highspeed (rápido)" },
+  ],
+  gemini: [
+    { value: "gemini-2.5-flash-lite", label: "Gemini 2.5 Flash-Lite (rápido)" },
+    { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash" },
+    { value: "gemini-2.5-pro", label: "Gemini 2.5 Pro" },
+  ],
+  openrouter: [
+    { value: "openai/gpt-4o-mini", label: "GPT-4o Mini" },
+    { value: "google/gemini-2.5-flash", label: "Gemini 2.5 Flash" },
+    { value: "anthropic/claude-sonnet-4", label: "Claude Sonnet 4" },
   ],
 };
 
@@ -164,7 +174,7 @@ export function AgentEditor({ initial, mode }: Props) {
                 <Select
                   value={data.provider}
                   onValueChange={(v) => {
-                    const provider = v as "openai" | "anthropic" | "minimax";
+                     const provider = v as AgentFormData["provider"];
                     set("provider", provider);
                     set("model", MODELS[provider][0].value);
                   }}
@@ -173,7 +183,9 @@ export function AgentEditor({ initial, mode }: Props) {
                   <SelectContent>
                     <SelectItem value="openai">OpenAI</SelectItem>
                     <SelectItem value="anthropic">Anthropic</SelectItem>
-                    <SelectItem value="minimax">Minimax</SelectItem>
+                     <SelectItem value="minimax">Minimax</SelectItem>
+                     <SelectItem value="gemini">Google Gemini</SelectItem>
+                     <SelectItem value="openrouter">OpenRouter</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

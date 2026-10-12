@@ -50,7 +50,7 @@ export async function evaluateTriggers(event: TriggerEvent): Promise<number> {
       if (!agent) continue;
       try {
         const cls = await classifyMessage({
-          agent: { id: agent.id, workspaceId: agent.workspace_id, provider: agent.provider as "openai" | "anthropic" | "minimax", model: agent.model },
+           agent: { id: agent.id, workspaceId: agent.workspace_id, provider: agent.provider, model: agent.model },
           messageText: event.messageText,
           criteria: t.criteria,
         });

@@ -7,6 +7,9 @@ import { evaluateTriggers } from "@/lib/automations/engine";
 // Process inbound: upsert contact + contact_channel + conversation + insert message
 // All writes use service_role (admin) to bypass RLS — webhooks have no user session.
 export async function processInbound(m: NormalizedMessage): Promise<void> {
+  // Without a stable ID, PostgreSQL's UNIQUE constraint cannot deduplicate
+  // NULLs; never let an unidentified delivery trigger a paid automation.
+  if (!m.messageExternalId) return;
   const admin = createAdminClient();
 
   // 1. Identify channel
@@ -171,8 +174,10 @@ export async function processInbound(m: NormalizedMessage): Promise<void> {
     }
   }
 
-  // 6. Upsert message (idempotent on (conversation_id, external_id))
-  const { error: msgErr } = await admin.from("messages").upsert({
+  // ponytail: claim the external message ID atomically. Polling and webhook
+  // retries can deliver the same message repeatedly; only the first insert
+  // may run automations (and call a paid AI provider).
+  const { data: inserted, error: msgErr } = await admin.from("messages").upsert({
     conversation_id: conv.id,
     external_id: m.messageExternalId,
     direction: "in",
@@ -184,7 +189,7 @@ export async function processInbound(m: NormalizedMessage): Promise<void> {
     media_size_bytes: mediaSize,
     raw_payload: m.raw as unknown as Record<string, unknown>,
     status: "delivered",
-  }, { onConflict: "conversation_id,external_id" });
+  }, { onConflict: "conversation_id,external_id", ignoreDuplicates: true }).select("id");
 
   // 6. Recompute unread_count atomically from the messages table (only for inbound)
   if (m.direction === "in") {
@@ -205,6 +210,8 @@ export async function processInbound(m: NormalizedMessage): Promise<void> {
     });
     return;
   }
+
+  if (!inserted?.length) return;
 
   // 7. Fire automations whose trigger matches this inbound message.
   await evaluateTriggers({

@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { AgentEditor } from "@/components/ai/agent-editor";
 import { getActiveWorkspaceIdAction } from "@/app/(workspace)/actions";
 import { getAgentAction } from "@/app/(workspace)/ai-agents/actions";
+import type { AIProvider } from "@/lib/ai/types";
 
 export default async function AgentDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -22,7 +23,7 @@ export default async function AgentDetailPage({ params }: { params: Promise<{ id
         id: res.data.id,
         name: res.data.name,
         description: res.data.description ?? undefined,
-        provider: res.data.provider as "openai" | "anthropic",
+        provider: res.data.provider as AIProvider,
         model: res.data.model,
         system_prompt: res.data.system_prompt,
         temperature: Number(res.data.temperature),

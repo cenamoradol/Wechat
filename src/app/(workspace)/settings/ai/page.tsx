@@ -20,7 +20,7 @@ export default async function AISettingsPage() {
       <div>
         <h1 className="text-2xl font-bold">Configuración de IA</h1>
         <p className="text-sm text-muted-foreground">
-          BYOK: trae tu propia API key de OpenAI, Anthropic o Minimax. Se almacena cifrada (AES-256-GCM).
+          BYOK: trae tu propia API key de OpenAI, Anthropic, Minimax, Google Gemini u OpenRouter. Se almacena cifrada (AES-256-GCM).
         </p>
       </div>
       <AIKeysForm
@@ -28,6 +28,8 @@ export default async function AISettingsPage() {
           { provider: "openai" as const, configured: keys?.some((k) => k.provider === "openai") ?? false, last_used_at: keys?.find((k) => k.provider === "openai")?.last_used_at ?? null },
           { provider: "anthropic" as const, configured: keys?.some((k) => k.provider === "anthropic") ?? false, last_used_at: keys?.find((k) => k.provider === "anthropic")?.last_used_at ?? null },
           { provider: "minimax" as const, configured: keys?.some((k) => k.provider === "minimax") ?? false, last_used_at: keys?.find((k) => k.provider === "minimax")?.last_used_at ?? null },
+          { provider: "gemini" as const, configured: keys?.some((k) => k.provider === "gemini") ?? false, last_used_at: keys?.find((k) => k.provider === "gemini")?.last_used_at ?? null },
+          { provider: "openrouter" as const, configured: keys?.some((k) => k.provider === "openrouter") ?? false, last_used_at: keys?.find((k) => k.provider === "openrouter")?.last_used_at ?? null },
         ]}
       />
     </div>
