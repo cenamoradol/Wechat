@@ -212,6 +212,7 @@ export async function getAutomationAction(id: string): Promise<{
     status: string;
     run_count: number;
     last_run_at: string | null;
+    canvas_positions: Record<string, { x: number; y: number }> | null;
   };
   error?: string;
 }> {
@@ -219,7 +220,7 @@ export async function getAutomationAction(id: string): Promise<{
   if ("error" in ctx) return { error: ctx.error };
   const { data, error } = await ctx.supabase
     .from("automations")
-    .select("id, name, description, trigger, steps, status, run_count, last_run_at")
+    .select("id, name, description, trigger, steps, status, run_count, last_run_at, canvas_positions")
     .eq("id", id)
     .eq("workspace_id", ctx.workspaceId)
     .maybeSingle();
@@ -302,6 +303,30 @@ export async function updateAutomationAction(
   if (error) return { error: error.message };
   revalidatePath("/automations");
   revalidatePath(`/automations/${id}`);
+  return { ok: true };
+}
+
+export async function saveCanvasPositionsAction(
+  id: string,
+  positions: Record<string, { x: number; y: number }>,
+): Promise<{ ok?: boolean; error?: string }> {
+  const ctx = await requireMember(["owner", "admin", "agent"]);
+  if ("error" in ctx) return { error: ctx.error };
+  // ponytail: server-side clamp + cap to keep a malicious payload from
+  // blowing the row. Keys are step types ("send_text" etc.) so 200
+  // distinct positions is more than enough.
+  const clean: Record<string, { x: number; y: number }> = {};
+  for (const [k, v] of Object.entries(positions).slice(0, 200)) {
+    if (typeof v?.x === "number" && typeof v?.y === "number" && Number.isFinite(v.x) && Number.isFinite(v.y)) {
+      clean[k] = { x: Math.round(v.x), y: Math.round(v.y) };
+    }
+  }
+  const { error } = await ctx.supabase
+    .from("automations")
+    .update({ canvas_positions: clean, updated_at: new Date().toISOString() })
+    .eq("id", id)
+    .eq("workspace_id", ctx.workspaceId);
+  if (error) return { error: error.message };
   return { ok: true };
 }
 

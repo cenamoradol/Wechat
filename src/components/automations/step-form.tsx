@@ -16,7 +16,7 @@ import {
 import { cn } from "@/lib/utils";
 import type { Step } from "@/lib/automations/types";
 
-type Options = {
+export type Options = {
   tags: Array<{ id: string; name: string; color: string }>;
   templates: Array<{ id: string; name: string; language: string }>;
   members: Array<{ id: string; full_name: string | null; email: string }>;
@@ -144,7 +144,7 @@ export function StepForm({ step, index, options, onChange, onRemove, onMoveUp, o
   );
 }
 
-function StepFields({ step, options, onChange }: { step: Step; options: Options; onChange: (s: Step) => void }) {
+export function StepFields({ step, options, onChange }: { step: Step; options: Options; onChange: (s: Step) => void }) {
   switch (step.type) {
     case "send_text":
       return (
@@ -614,7 +614,7 @@ function EntitySelect({
   );
 }
 
-function KeyValueEditor({
+export function KeyValueEditor({
   value,
   onChange,
   keyPlaceholder,

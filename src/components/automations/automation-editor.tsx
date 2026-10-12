@@ -2,12 +2,13 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Save } from "lucide-react";
+import { Save, LayoutList, Workflow } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { AutomationCanvas } from "@/components/automations/canvas/flow-canvas";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import {
@@ -20,7 +21,7 @@ import type { Step, Trigger } from "@/lib/automations/types";
 import { AddStepMenu, StepForm, defaultStepFor, validateStep } from "@/components/automations/step-form";
 
 type Props = {
-  initial?: AutomationFormData & { id?: string };
+  initial?: AutomationFormData & { id?: string; canvasPositions?: Record<string, { x: number; y: number }> | null };
 };
 
 const TRIGGER_LABELS: Array<{ value: Trigger["type"]; label: string; description: string }> = [
@@ -42,6 +43,7 @@ export function AutomationEditor({ initial }: Props) {
     (initial?.trigger as Trigger) ?? { type: "message_received", channel: "any", match: "any", value: "" },
   );
   const [steps, setSteps] = useState<Step[]>((initial?.steps as Step[] | undefined) ?? []);
+  const [view, setView] = useState<"list" | "canvas">("list");
   const [pending, start] = useTransition();
   const [options, setOptions] = useState<{
     tags: Array<{ id: string; name: string; color: string }>;
@@ -171,10 +173,40 @@ export function AutomationEditor({ initial }: Props) {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-base">Steps ({steps.length})</CardTitle>
-          <AddStepMenu onAdd={addStep} />
+          <div className="flex items-center gap-2">
+            <div className="inline-flex rounded-md border bg-muted/40 p-0.5">
+              <Button
+                variant={view === "list" ? "default" : "ghost"}
+                size="sm"
+                onClick={() => setView("list")}
+                title="Editor en lista"
+              >
+                <LayoutList className="h-4 w-4" />
+                Lista
+              </Button>
+              <Button
+                variant={view === "canvas" ? "default" : "ghost"}
+                size="sm"
+                onClick={() => setView("canvas")}
+                title="Editor visual (N8N-style)"
+              >
+                <Workflow className="h-4 w-4" />
+                Canvas
+              </Button>
+            </div>
+            {view === "list" && <AddStepMenu onAdd={addStep} />}
+          </div>
         </CardHeader>
         <CardContent className="space-y-2">
-          {steps.length === 0 ? (
+          {view === "canvas" ? (
+            <AutomationCanvas
+              steps={steps}
+              onChange={setSteps}
+              options={options}
+              automationId={initial?.id}
+              initialPositions={initial?.canvasPositions ?? null}
+            />
+          ) : steps.length === 0 ? (
             <p className="rounded border border-dashed p-6 text-center text-sm text-muted-foreground">
               Aún no hay steps. Haz click en "Añadir step" para empezar.
             </p>

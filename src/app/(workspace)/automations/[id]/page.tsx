@@ -36,6 +36,7 @@ export default async function AutomationDetailPage({
           trigger: autoRes.data.trigger as never,
           steps: autoRes.data.steps as never,
           status: autoRes.data.status as "active" | "paused" | "draft",
+          canvasPositions: autoRes.data.canvas_positions ?? null,
         }}
       />
       <div className="px-6">

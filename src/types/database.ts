@@ -412,6 +412,7 @@ export type Database = {
           run_count: number;
           created_at: string;
           updated_at: string;
+          canvas_positions: Record<string, { x: number; y: number }> | null;
         };
         Insert: {
           workspace_id: string;
@@ -421,6 +422,7 @@ export type Database = {
           steps: unknown[];
           status?: "active" | "paused" | "draft";
           created_by?: string | null;
+          canvas_positions?: Record<string, { x: number; y: number }> | null;
         };
         Update: Partial<{
           name: string;
@@ -431,6 +433,7 @@ export type Database = {
           last_run_at: string | null;
           run_run_count: number;
           updated_at: string;
+          canvas_positions: Record<string, { x: number; y: number }> | null;
         }>;
         Relationships: [];
       };

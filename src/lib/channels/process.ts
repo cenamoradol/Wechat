@@ -214,11 +214,12 @@ export async function processInbound(m: NormalizedMessage): Promise<void> {
   if (!inserted?.length) return;
 
   // 7. Fire automations whose trigger matches this inbound message.
-  // ponytail: evaluateTriggers returns `{ matched, messagesSent }` so the
-  // caller can suppress the AI auto-reply when an automation already
-  // replied. Today the webhook doesn't run the agent directly, so the
-  // signal is logged. When auto-reply-on-inbound is added, gate it on
-  // `result.matched === 0` to avoid double-texting the customer.
+  // ponytail: evaluateTriggers returns `{ matched, messagesSent }`. If
+  // an automation already replied (matched > 0), the AI auto-reply
+  // skips — otherwise the customer gets the automation's response
+  // AND a redundant AI-generated answer. Fires-and-forgets the run,
+  // so we await the dispatch result to read the signal, then run
+  // auto-reply if no automation claimed the message.
   const dispatch = await evaluateTriggers({
     kind: "message_received",
     workspaceId: channel.workspace_id,
@@ -233,11 +234,144 @@ export async function processInbound(m: NormalizedMessage): Promise<void> {
     console.error("evaluateTriggers failed", e);
     return { matched: 0, messagesSent: 0 };
   });
+
   if (dispatch.matched > 0) {
     console.log(
-      `[processInbound] automation matched=${dispatch.matched} conversation=${conv.id} — AI auto-reply will be suppressed once enabled`,
+      `[processInbound] automation matched=${dispatch.matched} conversation=${conv.id} — suppressing AI auto-reply`,
     );
+    return;
   }
+
+  // 8. AI auto-reply. Only runs when no automation handled the message.
+  // fire-and-forget — webhook has no time to wait, and the customer
+  // sees the agent's reply in the inbox as soon as it's sent.
+  void runAutoReply({
+    conversationId: conv.id,
+    workspaceId: channel.workspace_id,
+    contactId,
+    contactChannelId: cc.id,
+    channelType: m.channelType,
+    channelExternalId: m.channelExternalId,
+    accessToken: channel.access_token_enc
+      ? decrypt(Buffer.from(channel.access_token_enc as string, "base64"))
+      : null,
+    contactExternalId: m.contactExternalId,
+    messageText: m.text ?? null,
+  }).catch((e) => console.error("auto-reply failed", e));
+}
+
+/**
+ * Generate and send an AI reply if the workspace's default agent is
+ * configured for auto-reply on inbound messages. Subject to the same
+ * rate-limit / handoff rules as the `ai_reply` step inside an
+ * automation, so the customer never gets both.
+ */
+async function runAutoReply(args: {
+  conversationId: string;
+  workspaceId: string;
+  contactId: string;
+  contactChannelId: string;
+  channelType: "whatsapp" | "facebook" | "instagram";
+  channelExternalId: string;
+  accessToken: string | null;
+  contactExternalId: string;
+  messageText: string | null;
+}): Promise<void> {
+  const admin = createAdminClient();
+  const { data: agent } = await admin
+    .from("ai_agents")
+    .select("id, name, description, provider, model, system_prompt, temperature, max_tokens, kb_enabled, auto_reply_enabled, max_replies_per_conversation, handoff_keywords, is_default, workspace_id, created_at, updated_at")
+    .eq("workspace_id", args.workspaceId)
+    .eq("is_default", true)
+    .maybeSingle();
+  if (!agent || !agent.auto_reply_enabled) return;
+  if (!args.messageText) return; // ponytail: only reply to text for now
+  if (!args.accessToken) {
+    console.warn("[auto-reply] no channel access token, skipping");
+    return;
+  }
+
+  // handoff check + rate limit
+  const text = args.messageText.toLowerCase();
+  for (const kw of agent.handoff_keywords ?? []) {
+    if (kw && text.includes(kw.toLowerCase())) {
+      console.log(`[auto-reply] handoff keyword: ${kw}`);
+      return;
+    }
+  }
+  const { count: aiReplies } = await admin
+    .from("messages")
+    .select("id", { count: "exact", head: true })
+    .eq("conversation_id", args.conversationId)
+    .eq("direction", "out")
+    .is("sent_by", null);
+  if ((aiReplies ?? 0) >= agent.max_replies_per_conversation) {
+    console.log(`[auto-reply] max replies reached (${aiReplies})`);
+    return;
+  }
+
+  // build chat history
+  const { data: msgs } = await admin
+    .from("messages")
+    .select("direction, text")
+    .eq("conversation_id", args.conversationId)
+    .is("deleted_at", null)
+    .order("created_at", { ascending: true })
+    .limit(20);
+  const chatMessages: Array<{ role: "user" | "assistant"; content: string }> = (msgs ?? []).map((m) => ({
+    role: m.direction === "in" ? "user" : "assistant",
+    content: m.text ?? "",
+  }));
+
+  const { generateAgentReply } = await import("@/lib/ai/chat");
+  const { content } = await generateAgentReply({
+    agent: {
+      id: agent.id,
+      workspaceId: agent.workspace_id,
+      name: agent.name,
+      description: agent.description,
+      provider: agent.provider as "openai" | "anthropic" | "minimax" | "gemini" | "openrouter",
+      model: agent.model,
+      systemPrompt: agent.system_prompt,
+      temperature: Number(agent.temperature),
+      maxTokens: agent.max_tokens,
+      kbEnabled: agent.kb_enabled,
+      autoReplyEnabled: agent.auto_reply_enabled,
+      maxRepliesPerConversation: agent.max_replies_per_conversation,
+      handoffKeywords: agent.handoff_keywords ?? [],
+      isDefault: agent.is_default,
+      createdAt: agent.created_at,
+      updatedAt: agent.updated_at,
+    },
+    messages: chatMessages,
+  });
+  if (!content.trim()) return;
+
+  const { getAdapter } = await import("@/lib/channels");
+  const adapter = getAdapter(args.channelType);
+  const sendRes = await adapter.sendText({
+    accessToken: args.accessToken,
+    fromExternalId: args.channelExternalId,
+    toExternalId: args.contactExternalId,
+    text: content,
+  });
+  await admin.from("messages").insert({
+    conversation_id: args.conversationId,
+    external_id: sendRes.externalId,
+    direction: "out",
+    type: "text",
+    text: content,
+    sent_by: null,
+    status: "sent",
+  });
+  await admin
+    .from("conversations")
+    .update({
+      last_message_at: new Date().toISOString(),
+      last_message_preview: content.slice(0, 200),
+    })
+    .eq("id", args.conversationId);
+  console.log(`[auto-reply] sent conversation=${args.conversationId}`);
 }
 
 /**
