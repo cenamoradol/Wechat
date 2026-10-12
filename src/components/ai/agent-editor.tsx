@@ -45,9 +45,12 @@ const MODELS: Record<AgentFormData["provider"], Array<{ value: string; label: st
     { value: "gemini-2.5-pro", label: "Gemini 2.5 Pro" },
   ],
   openrouter: [
-    { value: "openai/gpt-4o-mini", label: "GPT-4o Mini" },
-    { value: "google/gemini-2.5-flash", label: "Gemini 2.5 Flash" },
-    { value: "anthropic/claude-sonnet-4", label: "Claude Sonnet 4" },
+    { value: "google/gemini-2.5-flash-lite", label: "Gemini Flash-Lite · clasificar/extraer" },
+    { value: "deepseek/deepseek-v4.1-flash", label: "DeepSeek V4.1 Flash · respuestas" },
+    { value: "qwen/qwen3-30b-a3b-instruct-2507", label: "Qwen3 30B · texto y JSON" },
+    { value: "openai/gpt-4o-mini", label: "GPT-4o Mini · propósito general" },
+    { value: "google/gemini-2.5-flash", label: "Gemini 2.5 Flash · propósito general" },
+    { value: "anthropic/claude-sonnet-4", label: "Claude Sonnet 4 · tareas complejas" },
   ],
 };
 
