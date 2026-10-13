@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { extractFirstJsonObject, coerceExtractField } from "@/lib/automations/steps";
+import {
+  extractFirstJsonObject,
+  recoverFieldsFromMarkdown,
+  coerceExtractField,
+} from "@/lib/automations/steps";
 
 describe("extractFirstJsonObject", () => {
   it("returns pure JSON untouched", () => {
@@ -35,6 +39,67 @@ describe("extractFirstJsonObject", () => {
 
   it("returns the whole trimmed text when no { is present", () => {
     expect(extractFirstJsonObject("nothing here")).toBe("nothing here");
+  });
+});
+
+describe("recoverFieldsFromMarkdown", () => {
+  const fields = [
+    { name: "brand", type: "string" as const },
+    { name: "model", type: "string" as const },
+    { name: "year", type: "number" as const },
+  ];
+
+  it("recovers fields from a Spanish markdown list with **bold** names", () => {
+    const text = `He extraído los siguientes campos:
+- **Brand:** Honda
+- **Model:** Civic
+- **Year:** 2016
+*Asumo que "honds" es un error de escritura por "Honda".*`;
+    const out = recoverFieldsFromMarkdown(text, fields);
+    expect(out.brand).toBe("Honda");
+    expect(out.model).toBe("Civic");
+    expect(out.year).toBe("2016");
+  });
+
+  it("recovers fields from a plain 'Name: value' style", () => {
+    const text = `Brand: Toyota
+Model: Corolla
+Year: 2017`;
+    const out = recoverFieldsFromMarkdown(text, fields);
+    expect(out.brand).toBe("Toyota");
+    expect(out.model).toBe("Corolla");
+    expect(out.year).toBe("2017");
+  });
+
+  it("matches case-insensitively", () => {
+    const text = `BRAND: Honda
+model: civic`;
+    const out = recoverFieldsFromMarkdown(text, fields);
+    expect(out.brand).toBe("Honda");
+    expect(out.model).toBe("civic");
+  });
+
+  it("strips parenthetical commentary", () => {
+    const text = `Brand: Toyota (asumo typo por Toyota)
+Model: Corolla`;
+    const out = recoverFieldsFromMarkdown(text, fields);
+    expect(out.brand).toBe("Toyota");
+  });
+
+  it("strips trailing markdown asterisks", () => {
+    const text = `Brand: **Toyota**`;
+    const out = recoverFieldsFromMarkdown(text, fields);
+    expect(out.brand).toBe("Toyota");
+  });
+
+  it("returns empty when no declared fields match", () => {
+    const text = `Something else: 42`;
+    expect(recoverFieldsFromMarkdown(text, fields)).toEqual({});
+  });
+
+  it("ignores prose that mentions field names without naming them as headers", () => {
+    const text = `The customer wants a brand new car.`;
+    expect(recoverFieldsFromMarkdown(text, fields)).toEqual({});
   });
 });
 

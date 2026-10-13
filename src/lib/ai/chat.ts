@@ -17,6 +17,14 @@ export async function generateAgentReply(args: {
   agent: AIAgent;
   messages: AIMessage[];
   contactVars?: Record<string, string>;
+  /**
+   * ponytail: when true, sets OpenAI's `response_format: json_object`
+   * for providers that support it (openai, gemini, openrouter). MiniMax
+   * rejects the field, so it's skipped there. Used by ai_extract to
+   * force valid JSON output — without it, smaller models often respond
+   * in markdown ("- Brand: Toyota") and the downstream JSON.parse fails.
+   */
+  forceJson?: boolean;
 }): Promise<ChatResult> {
   const apiKey = await getApiKey(args.agent.workspaceId, args.agent.provider);
   if (!apiKey) throw new Error(`No API key for ${args.agent.provider} in this workspace`);
@@ -43,18 +51,24 @@ export async function generateAgentReply(args: {
   if (args.agent.provider !== "anthropic") {
     const cfg = PROVIDER_CONFIG[args.agent.provider];
     const path = args.agent.provider === "minimax" ? "/v1/chat/completions" : "/chat/completions";
+    // ponytail: response_format: json_object is OpenAI-compat. OpenAI,
+    // Gemini's OpenAI endpoint, and OpenRouter all honor it. MiniMax
+    // rejects it, Anthropic doesn't apply, so we gate on provider.
+    const supportsJsonMode = args.forceJson && args.agent.provider !== "minimax";
+    const body: Record<string, unknown> = {
+      model: args.agent.model,
+      temperature: args.agent.temperature,
+      max_tokens: args.agent.maxTokens,
+      messages: [
+        { role: "system", content: systemPrompt },
+        ...args.messages.map((m) => ({ role: m.role, content: m.content })),
+      ],
+    };
+    if (supportsJsonMode) body.response_format = { type: "json_object" };
     const res = await fetch(`${cfg.baseUrl}${path}`, {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: args.agent.model,
-        temperature: args.agent.temperature,
-        max_tokens: args.agent.maxTokens,
-        messages: [
-          { role: "system", content: systemPrompt },
-          ...args.messages.map((m) => ({ role: m.role, content: m.content })),
-        ],
-      }),
+      body: JSON.stringify(body),
     });
     if (!res.ok) {
       const txt = await res.text();

@@ -310,30 +310,34 @@ export async function runStep(step: Step, ctx: RunContext): Promise<unknown> {
         .map((f) => `  - "${f.name}": ${f.type === "number" ? "número o null" : f.type === "boolean" ? "true o false o null" : "string o null"}`)
         .join(",\n");
 
-      const systemPrompt = `${step.instruction}
+      const systemPrompt = `You are a structured data extractor. Your only output is a JSON object — no markdown, no prose, no explanations, no code fences.
 
-Responde SOLO con un JSON válido (sin markdown, sin texto adicional) con exactamente este shape:
+Required JSON shape (use exactly these keys and types):
 {
 ${fieldSpec}
 }
 
-Reglas:
-- Si el cliente no menciona un campo, OMITE la clave (no la pongas con null).
-- NO inventes valores. Si no está explícito, omite.
-- NO agregues campos extra.
-- Números como JSON numbers, booleanos como true/false, strings como texto plano.`;
+Rules:
+- If the customer did not mention a field, OMIT the key entirely (do not set it to null or "").
+- Do NOT invent values. If a field is not explicitly stated, omit it.
+- Do NOT add extra fields beyond the schema.
+- Numbers must be JSON numbers (no quotes), booleans must be true/false, strings must be plain text without surrounding quotes in the JSON output.
+- Reply in the JSON object only — the FIRST character of your response must be { and the LAST must be }.
+- Never start with "He extraído", "Here is", "Sure!", or any preamble.
+
+User instruction: ${step.instruction}`;
 
       const referenceBlock = referenceText
         ? `REFERENCE VOCABULARY (canonical names/values — match the customer's request against these, with typos and aliases; if not in the vocabulary, OMIT the field):\n${referenceText}\n\n`
         : "";
 
       const userPrompt = referenceBlock +
-        `Texto del cliente:
+        `Customer message:
 """
 ${sourceText}
 """
 
-Extrae los campos según las instrucciones del sistema.`;
+Return the JSON object now. No commentary, no markdown, just the JSON.`;
 
       const res = await generateAgentReply({
         agent: {
@@ -359,18 +363,31 @@ Extrae los campos según las instrucciones del sistema.`;
           "contact.name": ctx.contact.name ?? "",
           "contact.phone": ctx.contact.phone ?? "",
         },
+        forceJson: true,
       });
 
       // ponytail: tolerant JSON extraction (depth-counter, fence-strip),
-      // then type coercion per declared field. Unknown fields dropped.
+      // then a markdown-list fallback for when the LLM ignored the
+      // system prompt and replied in prose. Then type coercion per
+      // declared field; unknown fields are dropped.
       const jsonText = extractFirstJsonObject(res.content);
       let parsed: Record<string, unknown>;
       try {
         parsed = JSON.parse(jsonText) as Record<string, unknown>;
-      } catch (e) {
-        throw new Error(
-          `ai_extract: invalid JSON: ${(e as Error).message} | ${res.content.slice(0, 200)}`,
-        );
+      } catch {
+        // ponytail: last-resort parser. If the LLM responded in
+        // markdown like "- **Brand:** Toyota" or "Brand: Toyota",
+        // extract those pairs and try again. The field map is from
+        // the step's declared fields — only declared names match,
+        // so a stray "I noticed the customer…" sentence is ignored.
+        const recovered = recoverFieldsFromMarkdown(res.content, step.fields);
+        if (Object.keys(recovered).length > 0) {
+          parsed = recovered;
+        } else {
+          throw new Error(
+            `ai_extract: invalid JSON: ${res.content.slice(0, 200)}`,
+          );
+        }
       }
       if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
         throw new Error("ai_extract: LLM did not return a JSON object");
@@ -835,6 +852,67 @@ export function extractFirstJsonObject(text: string): string {
     }
   }
   return trimmed.slice(first);
+}
+
+/**
+ * ponytail: last-resort parser for ai_extract. When the LLM ignores
+ * the "respond with JSON only" instruction and writes markdown like
+ *
+ *   He extraído los siguientes campos:
+ *   - **Marca:** Toyota
+ *   - **Modelo:** Corolla
+ *   - **Año modelo:** 2017
+ *
+ * we recover the field→value pairs by matching declared field names
+ * case-insensitively against either `**Name:** value` or `Name: value`
+ * patterns. Returns an object keyed by the declared field name. Only
+ * declared names count, so stray prose is ignored.
+ *
+ * Type coercion is the caller's job (coerceExtractField handles it).
+ */
+export function recoverFieldsFromMarkdown(
+  text: string,
+  fields: Array<{ name: string; type: ExtractFieldType }>,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  if (!text || fields.length === 0) return out;
+  const declared = new Set(fields.map((f) => f.name.toLowerCase()));
+  // ponytail: match either "**Name:** value" or "Name: value", with
+  // the value running until the next line or a comma + new key.
+  // We try each declared name as the LHS.
+  for (const f of fields) {
+    const name = f.name;
+    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    // ponytail: try multiple patterns the LLM uses:
+    //   1) **Name:** value   (colon inside the closing **)
+    //   2) **Name**: value   (colon outside)
+    //   3) Name: value       (plain)
+    //   4) - **Name:** value (markdown list item)
+    const patterns = [
+      new RegExp(`\\*\\*\\s*${escaped}\\s*[:=]\\s*\\*\\*\\s*([^\\n\\r]+)`, "i"),
+      new RegExp(`\\*\\*\\s*${escaped}\\s*\\*\\*\\s*[:=]?\\s*([^\\n\\r]+)`, "i"),
+      new RegExp(`(?:^|\\n)\\s*(?:[-*]\\s+)?${escaped}\\s*[:=]\\s*([^\\n\\r]+)`, "i"),
+    ];
+    let value: string | undefined;
+    for (const re of patterns) {
+      const m = text.match(re);
+      if (m && m[1]) {
+        value = m[1];
+        break;
+      }
+    }
+    if (value === undefined) continue;
+    value = value.trim();
+    // Strip surrounding markdown like "*" / "**" / quotes / backticks
+    value = value.replace(/^["'`*]+|["'`*]+$/g, "").trim();
+    // Strip parenthetical commentary the LLM sometimes adds, e.g.
+    // "Toyota (asumo typo por Toyota)" → "Toyota"
+    const paren = value.match(/^([^(]+?)\s*\(/);
+    if (paren) value = paren[1].trim();
+    if (value) out[name] = value;
+    void declared; // declared is the lookup set; we iterate `fields` directly
+  }
+  return out;
 }
 
 // ponytail: coerce a single LLM-returned field to its declared type.
