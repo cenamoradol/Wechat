@@ -494,6 +494,20 @@ export function StepFields({ step, options, onChange }: { step: Step; options: O
               <Plus className="h-3.5 w-3.5" /> Añadir campo
             </Button>
           </div>
+          <div>
+            <Label>Vocabulario de referencia (opcional)</Label>
+            <Input
+              value={step.referencePath ?? ""}
+              onChange={(e) => onChange({ ...step, referencePath: e.target.value || undefined })}
+              placeholder="vars.brands"
+            />
+            <p className="mt-1 text-xs text-muted-foreground">
+              Path a un <code>vars.X</code> definido en un step anterior (típicamente un webhook con
+              <code> saveAs</code>). El valor se inyecta en el prompt como bloque de referencia para que el
+              LLM matchee el mensaje del cliente contra datos canónicos — útil para catálogos, listas de
+              SKUs, marcas, etc. Cap 8 KB.
+            </p>
+          </div>
         </div>
       );
 
@@ -554,6 +568,164 @@ export function StepFields({ step, options, onChange }: { step: Step; options: O
           </div>
           <p className="text-xs text-muted-foreground">
             Las sub-ramas (then/else) no son editables en esta versión. La rama `then` se ejecuta si la condición se cumple, `else` (si existe) si no.
+          </p>
+        </div>
+      );
+
+    case "llm_draft_message":
+      return (
+        <div className="space-y-2">
+          <EntitySelect
+            value={step.agentId}
+            onChange={(v) => onChange({ ...step, agentId: v })}
+            options={(options.aiAgents ?? []).map((a) => ({ value: a.id, label: `${a.name} (${a.provider}/${a.model})` }))}
+            placeholder="Agente IA"
+            emptyText="Crea un agente en /ai-agents primero"
+          />
+          <div>
+            <Label>Prompt</Label>
+            <Textarea
+              value={step.prompt}
+              onChange={(e) => onChange({ ...step, prompt: e.target.value })}
+              rows={4}
+              placeholder="El cliente preguntó por X. Los datos están en vars.X. Respondé conciso, en español."
+            />
+            <p className="mt-1 text-xs text-muted-foreground">
+              El LLM recibe el historial de la conversación + todos los <code>vars.X</code> acumulados
+              (incluyendo responses de webhooks previos). Compone y envía por el canal.
+            </p>
+          </div>
+        </div>
+      );
+
+    case "send_images":
+      return (
+        <div className="space-y-2">
+          <EntitySelect
+            value={step.agentId}
+            onChange={(v) => onChange({ ...step, agentId: v })}
+            options={(options.aiAgents ?? []).map((a) => ({ value: a.id, label: `${a.name} (${a.provider}/${a.model})` }))}
+            placeholder="Agente IA (opcional, para caption)"
+            emptyText="Crea un agente en /ai-agents primero"
+          />
+          <div>
+            <Label>imagePath (vars.X[*].Y)</Label>
+            <Input
+              value={step.imagePath}
+              onChange={(e) => onChange({ ...step, imagePath: e.target.value })}
+              placeholder="vars.results[*].url"
+            />
+            <p className="mt-1 text-xs text-muted-foreground">
+              Path a un array en vars. El motor itera con <code>[*]</code> y envía una imagen por
+              elemento. Soporta wildcards anidados (ej: <code>vars.data[*].media[0].url</code>).
+            </p>
+          </div>
+          <div>
+            <Label>Caption (opcional)</Label>
+            <Textarea
+              value={step.caption ?? ""}
+              onChange={(e) => onChange({ ...step, caption: e.target.value })}
+              rows={2}
+              placeholder="{{ loop.index }}. {{ loop.title }}"
+            />
+            <p className="mt-1 text-xs text-muted-foreground">
+              <code>{"{{ loop.index }}"}</code> = 1-based index. <code>{"{{ loop.X }}"}</code> = campo del
+              item actual. Ej: <code>{"{{ loop.title }}"}</code> lee <code>currentItem.title</code>.
+            </p>
+          </div>
+          <div>
+            <Label>maxImages (cap)</Label>
+            <Input
+              type="number"
+              min={1}
+              value={step.maxImages ?? 5}
+              onChange={(e) => onChange({ ...step, maxImages: Number(e.target.value) })}
+            />
+            <p className="mt-1 text-xs text-muted-foreground">
+              Cuántas imágenes enviar como máximo en un solo run. Default 5.
+            </p>
+          </div>
+        </div>
+      );
+
+    case "condition":
+      return (
+        <div className="space-y-2">
+          <div>
+            <Label>Subject</Label>
+            <Select
+              value={step.subject}
+              onValueChange={(v) => onChange({ ...step, subject: v as typeof step.subject })}
+            >
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="tag_presence">tag_presence (¿tiene esta etiqueta?)</SelectItem>
+                <SelectItem value="contact_field">contact_field (campo del contacto)</SelectItem>
+                <SelectItem value="message_content">message_content (texto del mensaje)</SelectItem>
+                <SelectItem value="time_of_day">time_of_day (HH:mm-HH:mm)</SelectItem>
+                <SelectItem value="vars_value">vars_value (valor en ctx.vars)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label>Operando</Label>
+            <Input
+              value={step.operand ?? ""}
+              onChange={(e) => onChange({ ...step, operand: e.target.value })}
+              placeholder={
+                step.subject === "vars_value"
+                  ? "vars.response.results"
+                  : step.subject === "time_of_day"
+                    ? "09:00-18:00"
+                    : "ID, path o texto"
+              }
+            />
+            <p className="mt-1 text-xs text-muted-foreground">
+              {step.subject === "vars_value"
+                ? "Path a un valor en vars (soporta wildcards vars.X[*].Y y vars.X[0].Y)."
+                : step.subject === "time_of_day"
+                  ? "Rango HH:mm-HH:mm. Soporta rangos que cruzan medianoche (ej: 18:00-09:00)."
+                  : step.subject === "tag_presence"
+                    ? "ID de la etiqueta a verificar."
+                    : step.subject === "contact_field"
+                      ? "Nombre de la columna del contacto (name, email, phone, etc)."
+                      : "Texto a buscar en el mensaje del cliente."}
+            </p>
+          </div>
+          {step.subject === "vars_value" && (
+            <>
+              <div>
+                <Label>Operador</Label>
+                <Select
+                  value={step.operator ?? "is_empty"}
+                  onValueChange={(v) => onChange({ ...step, operator: v as typeof step.operator })}
+                >
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="is_empty">is_empty (default)</SelectItem>
+                    <SelectItem value="is_not_empty">is_not_empty</SelectItem>
+                    <SelectItem value="equals">equals</SelectItem>
+                    <SelectItem value="not_equals">not_equals</SelectItem>
+                    <SelectItem value="contains">contains</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Default <code>is_empty</code> cuando no se especifica — útil para "¿el webhook encontró algo?".
+                </p>
+              </div>
+              <div>
+                <Label>Valor (para equals/not_equals/contains)</Label>
+                <Input
+                  value={step.value ?? ""}
+                  onChange={(e) => onChange({ ...step, value: e.target.value })}
+                  placeholder="texto a comparar"
+                />
+              </div>
+            </>
+          )}
+          <p className="text-xs text-muted-foreground">
+            Las sub-ramas <code>yes</code>/<code>no</code> se editan en el <strong>Canvas</strong> (no en lista).
+            Cambiá a la vista Canvas para arrastrar steps a cada rama.
           </p>
         </div>
       );
