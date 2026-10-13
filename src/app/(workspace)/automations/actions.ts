@@ -51,6 +51,13 @@ const StepSchema: z.ZodType<unknown> = z.lazy(() =>
         )
         .min(1)
         .max(20),
+      // ponytail: optional reference vocabulary path (e.g. "vars.brands").
+      // The same length / char-class rules as the validator use.
+      referencePath: z
+        .string()
+        .max(200)
+        .refine((s) => !/[\r\n;]/.test(s), "referencePath cannot contain newlines or semicolons")
+        .optional(),
     }),
     z.object({
       type: z.literal("branch"),
@@ -61,6 +68,41 @@ const StepSchema: z.ZodType<unknown> = z.lazy(() =>
       }),
       then: z.array(StepSchema),
       else: z.array(StepSchema).optional(),
+    }),
+    z.object({
+      // ponytail: LLM composes the outbound message from ctx.vars +
+      // conversation history, then sends via the channel. Same shape
+      // as wacrm's llm_draft_message.
+      type: z.literal("llm_draft_message"),
+      agentId: z.string().max(100),
+      prompt: z.string().min(1).max(8000),
+    }),
+    z.object({
+      // ponytail: send one WhatsApp image per item in vars.X[*].Y.
+      type: z.literal("send_images"),
+      agentId: z.string().max(100),
+      imagePath: z.string().min(1).max(500).refine((s) => s.includes("[*]"), "imagePath must contain [*]"),
+      caption: z.string().max(2000).optional(),
+      maxImages: z.number().int().min(1).max(50).optional(),
+    }),
+    z.object({
+      // ponytail: condition step with 5 subjects + recursive yes/no
+      // sub-lists. Mirrors wacrm's condition.
+      type: z.literal("condition"),
+      subject: z.enum([
+        "tag_presence",
+        "contact_field",
+        "message_content",
+        "time_of_day",
+        "vars_value",
+      ]),
+      operand: z.string().max(200).optional(),
+      operator: z
+        .enum(["is_empty", "is_not_empty", "equals", "not_equals", "contains"])
+        .optional(),
+      value: z.string().max(4096).optional(),
+      yes: z.array(StepSchema),
+      no: z.array(StepSchema),
     }),
   ]),
 );
@@ -160,6 +202,21 @@ function validateStep(s: { type: string; [k: string]: unknown }): string | null 
     }
     case "branch":
       if (!String((s.if as { value?: string })?.value ?? "").trim()) return "if.value requerido";
+      return null;
+    case "llm_draft_message":
+      if (!String(s.agentId ?? "").trim()) return "agentId requerido";
+      if (!String(s.prompt ?? "").trim()) return "prompt requerido";
+      return null;
+    case "send_images":
+      if (!String(s.agentId ?? "").trim()) return "agentId requerido";
+      if (!String(s.imagePath ?? "").trim()) return "imagePath requerido";
+      if (!String(s.imagePath).includes("[*]")) return "imagePath debe contener [*]";
+      return null;
+    case "condition":
+      if (!String(s.subject ?? "").trim()) return "subject requerido";
+      if (s.subject === "vars_value" && !String(s.operand ?? "").trim()) {
+        return "operand requerido para vars_value";
+      }
       return null;
     case "set_status":
     case "close_conversation":
