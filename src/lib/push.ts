@@ -58,26 +58,6 @@ export type PushPayload = {
   tag?: string;
 };
 
-// In-memory ring buffer of recent push attempts. Used by /api/debug/push-logs.
-// Resets on server restart — good enough for debugging.
-const LOG_LIMIT = 50;
-export type PushLogEntry = {
-  ts: string;
-  userId: string;
-  event: PushEvent;
-  endpoint: string | null;
-  status: "sent" | "removed" | "skipped" | "no_subs" | "pref_off" | "error";
-  detail?: string;
-};
-const logs: PushLogEntry[] = [];
-export function getPushLogs() {
-  return [...logs];
-}
-function log(entry: PushLogEntry) {
-  logs.unshift(entry);
-  if (logs.length > LOG_LIMIT) logs.length = LOG_LIMIT;
-}
-
 /**
  * Send a push to every active subscription of `userId` that has the event
  * toggle enabled in their notification_prefs.
@@ -90,10 +70,7 @@ export async function sendPushToUser(args: {
   event: PushEvent;
   payload: PushPayload;
 }): Promise<{ sent: number; removed: number; skipped: boolean }> {
-  if (!ensureConfigured()) {
-    log({ ts: new Date().toISOString(), userId: args.userId, event: args.event, endpoint: null, status: "skipped", detail: "VAPID not configured" });
-    return { sent: 0, removed: 0, skipped: true };
-  }
+  if (!ensureConfigured()) return { sent: 0, removed: 0, skipped: true };
 
   const admin = createAdminClient();
 
@@ -110,22 +87,15 @@ export async function sendPushToUser(args: {
     ...DEFAULT_PREFS,
     ...((profile?.notification_prefs as NotificationPrefs | null) ?? {}),
   };
-  if (!prefs[args.event]) {
-    log({ ts: new Date().toISOString(), userId: args.userId, event: args.event, endpoint: null, status: "pref_off" });
-    return { sent: 0, removed: 0, skipped: false };
-  }
+  if (!prefs[args.event]) return { sent: 0, removed: 0, skipped: false };
 
-  if (!subs || subs.length === 0) {
-    log({ ts: new Date().toISOString(), userId: args.userId, event: args.event, endpoint: null, status: "no_subs" });
-    return { sent: 0, removed: 0, skipped: false };
-  }
+  if (!subs || subs.length === 0) return { sent: 0, removed: 0, skipped: false };
 
   let sent = 0;
   const dead: string[] = [];
 
   await Promise.allSettled(
     subs.map(async (s) => {
-      const ep = (s.subscription as { endpoint?: string })?.endpoint ?? null;
       try {
         await webpush.sendNotification(
           s.subscription as unknown as webpush.PushSubscription,
@@ -133,20 +103,16 @@ export async function sendPushToUser(args: {
           { TTL: 60 * 60 }, // 1h
         );
         sent++;
-        log({ ts: new Date().toISOString(), userId: args.userId, event: args.event, endpoint: ep, status: "sent" });
         await admin
           .from("push_subscriptions")
           .update({ last_seen_at: new Date().toISOString() })
           .eq("id", s.id);
       } catch (e: any) {
-        const code = e?.statusCode;
-        // 404/410 = subscription is dead, remove it. 401/403 = VAPID config issue.
-        if (code === 404 || code === 410) {
+        // 404/410 = subscription is dead, remove it. Other errors get logged.
+        if (e?.statusCode === 404 || e?.statusCode === 410) {
           dead.push(s.id);
-          log({ ts: new Date().toISOString(), userId: args.userId, event: args.event, endpoint: ep, status: "removed", detail: `${code}` });
         } else {
-          log({ ts: new Date().toISOString(), userId: args.userId, event: args.event, endpoint: ep, status: "error", detail: `${code ?? "?"} ${e?.body ?? e?.message ?? ""}` });
-          console.error("[push] send failed", code, e?.body);
+          console.error("[push] send failed", e?.statusCode, e?.body);
         }
       }
     }),

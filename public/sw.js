@@ -17,9 +17,7 @@ self.addEventListener("push", (event) => {
   let payload = { title: "Wechat", body: "", href: "/" };
   try {
     if (event.data) payload = { ...payload, ...event.data.json() };
-    console.log("[push] received", payload);
-  } catch (e) {
-    console.error("[push] parse failed", e);
+  } catch {
     if (event.data) payload.body = event.data.text();
   }
 
