@@ -17,19 +17,24 @@ self.addEventListener("push", (event) => {
   let payload = { title: "Wechat", body: "", href: "/" };
   try {
     if (event.data) payload = { ...payload, ...event.data.json() };
-  } catch {
+    console.log("[push] received", payload);
+  } catch (e) {
+    console.error("[push] parse failed", e);
     if (event.data) payload.body = event.data.text();
   }
 
-  const notif = new Notification(payload.title, {
-    body: payload.body,
-    icon: "/favicon.ico",
-    badge: "/favicon.ico",
-    data: { href: payload.href || "/" },
-    tag: payload.tag || undefined,
-  });
-
-  event.waitUntil(notif);
+  // Use registration.showNotification (returns a Promise) so event.waitUntil
+  // properly keeps the SW alive until the notification is shown.
+  event.waitUntil(
+    self.registration.showNotification(payload.title, {
+      body: payload.body,
+      icon: "/favicon.ico",
+      badge: "/favicon.ico",
+      data: { href: payload.href || "/" },
+      tag: payload.tag || undefined,
+      requireInteraction: false,
+    }),
+  );
 });
 
 self.addEventListener("notificationclick", (event) => {
