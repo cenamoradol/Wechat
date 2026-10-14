@@ -120,6 +120,7 @@ export function NotificationsForm() {
         }
         const res = await registerPushAction({
           subscription: sub.toJSON() as any,
+          userAgent: navigator.userAgent,
         });
         if (res.error) {
           toast.error(res.error);

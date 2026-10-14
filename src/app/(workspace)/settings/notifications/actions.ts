@@ -62,6 +62,7 @@ const SubSchema = z.object({
       auth: z.string(),
     }),
   }),
+  userAgent: z.string().max(500).optional(),
 });
 
 export async function registerPushAction(
@@ -82,7 +83,8 @@ export async function registerPushAction(
   if (!workspaceId) return { error: "No tienes workspace activo" };
 
   const admin = createAdminClient();
-  const ua = typeof navigator !== "undefined" ? navigator.userAgent : null;
+  // UA must come from the client — the server's is always "Node.js/..."
+  const ua = parsed.data.userAgent ?? "unknown";
 
   // Dedupe by endpoint
   const { data: existing } = await admin
