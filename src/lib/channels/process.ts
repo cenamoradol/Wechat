@@ -100,7 +100,7 @@ export async function processInbound(m: NormalizedMessage): Promise<void> {
   const preview = (m.text ?? `[${m.type}]`).slice(0, 200);
   const { data: existing } = await admin
     .from("conversations")
-    .select("last_message_at")
+    .select("last_message_at, assigned_to")
     .eq("contact_channel_id", cc.id)
     .maybeSingle();
   const newerThanLast = !existing?.last_message_at ||
@@ -123,7 +123,7 @@ export async function processInbound(m: NormalizedMessage): Promise<void> {
   const { data: conv, error: convErr } = await admin
     .from("conversations")
     .upsert(convFields, { onConflict: "contact_channel_id" })
-    .select("id, archived_at")
+    .select("id, archived_at, assigned_to")
     .single();
   if (convErr || !conv) {
     console.error("conversation upsert failed", convErr);
@@ -212,6 +212,23 @@ export async function processInbound(m: NormalizedMessage): Promise<void> {
   }
 
   if (!inserted?.length) return;
+
+  // 6.5. Push notification to assigned user (or workspace owner if unassigned).
+  //      Best-effort: any failure must not break message processing.
+  if (m.direction === "in") {
+    void notifyNewMessage({
+      workspaceId: channel.workspace_id,
+      conversationId: conv.id,
+      assignedTo: conv.assigned_to,
+      contactName: preview,
+      channelLabel:
+        m.channelType === "whatsapp"
+          ? "WhatsApp"
+          : m.channelType === "facebook"
+            ? "Messenger"
+            : "Instagram",
+    }).catch((e) => console.error("[push] new_message notify failed", e));
+  }
 
   // 7. Fire automations whose trigger matches this inbound message.
   // ponytail: evaluateTriggers returns `{ matched, messagesSent }`. If
@@ -433,5 +450,51 @@ export async function logWebhookEvent(args: {
     payload: args.payload as Record<string, unknown>,
     processed: args.processed ?? false,
     error: args.error ?? null,
+  });
+}
+
+/**
+ * Send a push notification to the user assigned to a conversation (or to
+ * the workspace owner if the conversation is unassigned). Respects each
+ * user's `notification_prefs.new_message` toggle.
+ */
+async function notifyNewMessage(args: {
+  workspaceId: string;
+  conversationId: string;
+  assignedTo: string | null;
+  contactName: string;
+  channelLabel: string;
+}) {
+  const { sendPushToUser, sendPushToUsers } = await import("@/lib/push");
+  const admin = createAdminClient();
+  const href = `/inbox?conversation=${args.conversationId}`;
+  const payload = {
+    title: `Nuevo mensaje · ${args.channelLabel}`,
+    body: args.contactName.slice(0, 120),
+    href,
+    tag: `conv-${args.conversationId}`,
+  };
+
+  if (args.assignedTo) {
+    await sendPushToUser({
+      userId: args.assignedTo,
+      event: "new_message",
+      payload,
+    });
+    return;
+  }
+
+  // No assignee → notify all owners/admins of the workspace
+  const { data: recipients } = await admin
+    .from("workspace_members")
+    .select("user_id")
+    .eq("workspace_id", args.workspaceId)
+    .in("role", ["owner", "admin"]);
+  if (!recipients?.length) return;
+
+  await sendPushToUsers({
+    userIds: recipients.map((r) => r.user_id),
+    event: "new_message",
+    payload,
   });
 }

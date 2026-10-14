@@ -10,6 +10,7 @@ import {
   Contact,
   Zap,
   Bot,
+  Bell,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -20,8 +21,9 @@ const nav = [
   { href: "/automations", label: "Automatizaciones", icon: Zap },
   { href: "/ai-agents", label: "Agentes IA", icon: Bot },
   { href: "/team", label: "Equipo", icon: Users },
+  { href: "/settings/profile", label: "Mi perfil", icon: Settings },
+  { href: "/settings/notifications", label: "Notificaciones", icon: Bell },
   { href: "/settings/workspace", label: "Workspace", icon: Settings },
-  { href: "/settings", label: "Configuración", icon: Settings },
 ];
 
 export function Sidebar() {

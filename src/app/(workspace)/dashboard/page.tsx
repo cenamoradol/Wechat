@@ -4,7 +4,10 @@ import { redirect } from "next/navigation";
 import { getActiveWorkspaceIdAction } from "@/app/(workspace)/actions";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Inbox, MessageSquare, Users, Settings } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Inbox, MessageSquare, Users, Settings, TrendingUp } from "lucide-react";
+import { MessagesChart } from "@/components/dashboard/messages-chart";
+import { getMessagesPerDay } from "./queries";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -20,7 +23,7 @@ export default async function DashboardPage() {
   const now = new Date();
   const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
 
-  const [conversations, channels, todaysMessages, unreadCount, members] = await Promise.all([
+  const [conversations, channels, todaysMessages, unreadCount, members, messagesPerDay] = await Promise.all([
     admin
       .from("conversations")
       .select("id, status, last_message_at", { count: "exact" })
@@ -43,6 +46,7 @@ export default async function DashboardPage() {
       .from("workspace_members")
       .select("id", { count: "exact", head: true })
       .eq("workspace_id", workspaceId),
+    getMessagesPerDay(workspaceId, 14),
   ]);
 
   // Count today's messages via a real join
@@ -82,6 +86,18 @@ export default async function DashboardPage() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="flex items-center gap-2 text-sm font-semibold">
+              <TrendingUp className="h-4 w-4" />
+              Mensajes recibidos · últimos 14 días
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <MessagesChart data={messagesPerDay} />
+          </CardContent>
+        </Card>
+
         <div className="rounded-lg border bg-card p-5">
           <h2 className="mb-3 text-sm font-semibold">Acciones rápidas</h2>
           <div className="grid gap-2">

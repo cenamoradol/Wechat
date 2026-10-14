@@ -7,6 +7,7 @@ export type Database = {
           email: string;
           full_name: string | null;
           avatar_url: string | null;
+          notification_prefs: Record<string, unknown>;
           created_at: string;
           updated_at: string;
         };
@@ -16,12 +17,13 @@ export type Database = {
           full_name?: string | null;
           avatar_url?: string | null;
         };
-        Update: {
-          email?: string;
-          full_name?: string | null;
-          avatar_url?: string | null;
-          updated_at?: string;
-        };
+        Update: Partial<{
+          email: string;
+          full_name: string | null;
+          avatar_url: string | null;
+          updated_at: string;
+          notification_prefs: Record<string, unknown>;
+        }>;
         Relationships: [];
       };
       workspaces: {
@@ -604,6 +606,29 @@ export type Database = {
           api_key_enc: string;
           label: string | null;
           last_used_at: string | null;
+        }>;
+        Relationships: [];
+      };
+      push_subscriptions: {
+        Row: {
+          id: string;
+          user_id: string;
+          workspace_id: string;
+          subscription: Record<string, unknown>;
+          user_agent: string | null;
+          created_at: string;
+          last_seen_at: string;
+        };
+        Insert: {
+          user_id: string;
+          workspace_id: string;
+          subscription: Record<string, unknown>;
+          user_agent?: string | null;
+        };
+        Update: Partial<{
+          subscription: Record<string, unknown>;
+          user_agent: string | null;
+          last_seen_at: string;
         }>;
         Relationships: [];
       };

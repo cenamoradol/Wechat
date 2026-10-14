@@ -10,6 +10,8 @@ export const env = createEnv({
     CRON_SECRET: z.string().min(1).optional(),
     OPENAI_API_KEY: z.string().optional(),
     ANTHROPIC_API_KEY: z.string().optional(),
+    VAPID_PRIVATE_KEY: z.string().min(1).optional(),
+    VAPID_SUBJECT: z.string().min(1).optional(),
   },
   client: {
     NEXT_PUBLIC_APP_URL: z.string().url(),
@@ -21,6 +23,7 @@ export const env = createEnv({
     NEXT_PUBLIC_META_CONFIG_ID: z.string().optional(),
     // Si está vacío, se deriva de NEXT_PUBLIC_APP_URL.
     NEXT_PUBLIC_META_REDIRECT_URI: z.string().url().optional(),
+    NEXT_PUBLIC_VAPID_PUBLIC_KEY: z.string().min(1).optional(),
   },
   runtimeEnv: {
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
@@ -30,6 +33,7 @@ export const env = createEnv({
     NEXT_PUBLIC_META_APP_ID: process.env.NEXT_PUBLIC_META_APP_ID,
     NEXT_PUBLIC_META_CONFIG_ID: process.env.NEXT_PUBLIC_META_CONFIG_ID,
     NEXT_PUBLIC_META_REDIRECT_URI: process.env.NEXT_PUBLIC_META_REDIRECT_URI,
+    NEXT_PUBLIC_VAPID_PUBLIC_KEY: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY,
     SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
     ENCRYPTION_KEY: process.env.ENCRYPTION_KEY,
     META_APP_SECRET: process.env.META_APP_SECRET,
@@ -37,5 +41,7 @@ export const env = createEnv({
     CRON_SECRET: process.env.CRON_SECRET,
     OPENAI_API_KEY: process.env.OPENAI_API_KEY,
     ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
+    VAPID_PRIVATE_KEY: process.env.VAPID_PRIVATE_KEY,
+    VAPID_SUBJECT: process.env.VAPID_SUBJECT,
   },
 });

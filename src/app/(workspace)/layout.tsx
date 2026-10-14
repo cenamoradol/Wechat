@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Topbar } from "@/components/layout/topbar";
+import { CommandPalette } from "@/components/layout/command-palette";
 import {
   listUserWorkspacesAction,
   getActiveWorkspaceIdAction,
@@ -52,6 +53,7 @@ export default async function WorkspaceLayout({
         />
         <main className="flex-1 overflow-auto">{children}</main>
       </div>
+      <CommandPalette />
     </div>
   );
 }
