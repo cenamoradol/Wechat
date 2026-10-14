@@ -249,6 +249,7 @@ export type Database = {
           ai_agent_id: string | null;
           archived_at: string | null;
           archived_by: string | null;
+          push_last_sent_at: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -273,6 +274,7 @@ export type Database = {
           ai_agent_id: string | null;
           archived_at: string | null;
           archived_by: string | null;
+          push_last_sent_at: string | null;
         }>;
         Relationships: [];
       };

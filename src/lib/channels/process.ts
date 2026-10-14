@@ -457,7 +457,15 @@ export async function logWebhookEvent(args: {
  * Send a push notification to the user assigned to a conversation (or to
  * the workspace owner if the conversation is unassigned). Respects each
  * user's `notification_prefs.new_message` toggle.
+ *
+ * Dedup: at most one push per conversation per 20s. The first message wins;
+ * subsequent messages within the window just update the inbox without a push.
+ * shortcut: in-memory state won't work on Vercel — DB column is the only
+ * place that survives across serverless invocations. Upgrade if you need
+ * per-user dedup.
  */
+const PUSH_DEDUP_WINDOW_MS = 20_000;
+
 async function notifyNewMessage(args: {
   workspaceId: string;
   conversationId: string;
@@ -467,12 +475,23 @@ async function notifyNewMessage(args: {
 }) {
   const { sendPushToUser, sendPushToUsers } = await import("@/lib/push");
   const admin = createAdminClient();
+
+  // Dedup check: skip if the previous push for this conversation is recent.
+  const { data: conv } = await admin
+    .from("conversations")
+    .select("push_last_sent_at")
+    .eq("id", args.conversationId)
+    .maybeSingle();
+  const lastSentAt = conv?.push_last_sent_at;
+  if (lastSentAt && Date.now() - new Date(lastSentAt).getTime() < PUSH_DEDUP_WINDOW_MS) {
+    return; // recent push already fired — inbox preview is enough
+  }
+
   const href = `/inbox?conversation=${args.conversationId}`;
   const payload = {
     title: `Nuevo mensaje · ${args.channelLabel}`,
     body: args.contactName.slice(0, 120),
     href,
-    tag: `conv-${args.conversationId}`,
   };
 
   if (args.assignedTo) {
@@ -481,20 +500,26 @@ async function notifyNewMessage(args: {
       event: "new_message",
       payload,
     });
-    return;
+  } else {
+    // No assignee → notify all owners/admins of the workspace
+    const { data: recipients } = await admin
+      .from("workspace_members")
+      .select("user_id")
+      .eq("workspace_id", args.workspaceId)
+      .in("role", ["owner", "admin"]);
+    if (!recipients?.length) return;
+    await sendPushToUsers({
+      userIds: recipients.map((r) => r.user_id),
+      event: "new_message",
+      payload,
+    });
   }
 
-  // No assignee → notify all owners/admins of the workspace
-  const { data: recipients } = await admin
-    .from("workspace_members")
-    .select("user_id")
-    .eq("workspace_id", args.workspaceId)
-    .in("role", ["owner", "admin"]);
-  if (!recipients?.length) return;
-
-  await sendPushToUsers({
-    userIds: recipients.map((r) => r.user_id),
-    event: "new_message",
-    payload,
-  });
+  // Stamp the conversation AFTER a successful attempt. We don't gate on the
+  // push result — even if delivery failed, waiting 20s before retrying is
+  // the right behavior to avoid a retry storm.
+  await admin
+    .from("conversations")
+    .update({ push_last_sent_at: new Date().toISOString() })
+    .eq("id", args.conversationId);
 }
