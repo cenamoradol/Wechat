@@ -29,9 +29,9 @@ export default async function AIAgentsPage() {
     <div className="p-6 space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Agentes de IA</h1>
+          <h1 className="text-2xl font-bold">Agentes IA</h1>
           <p className="text-sm text-muted-foreground">
-            Crea agentes que responden en tu nombre. Usa OpenAI o Anthropic con tu propia API key.
+            Configurá uno y que responda por vos en WhatsApp, Instagram y Facebook.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -51,10 +51,10 @@ export default async function AIAgentsPage() {
       </div>
 
       {keys && keys.length === 0 && (
-        <Card className="border-amber-500/50 bg-amber-50">
+        <Card className="border-warning/40 bg-warning/10">
           <CardContent className="flex items-center justify-between gap-3 py-4">
             <div className="flex items-center gap-3">
-              <KeyRound className="h-5 w-5 text-amber-600" />
+              <KeyRound className="h-5 w-5 text-warning" />
               <div>
                 <p className="text-sm font-medium">No has configurado ninguna API key aún</p>
                 <p className="text-xs text-muted-foreground">Necesitas al menos una (OpenAI o Anthropic) para usar los agentes.</p>
@@ -69,18 +69,18 @@ export default async function AIAgentsPage() {
 
       {!agents || agents.length === 0 ? (
         <Card>
-          <CardContent className="flex flex-col items-center justify-center gap-2 py-12 text-center">
-            <Bot className="h-10 w-10 text-muted-foreground" />
-            <h3 className="text-lg font-medium">Sin agentes</h3>
-            <p className="text-sm text-muted-foreground">
-              Crea tu primer agente para empezar a auto-responder o usar el botón ✨ Sugerir.
+          <CardContent className="flex flex-col items-center justify-center gap-2 py-16 text-center">
+            <div className="mb-2 flex h-16 w-16 items-center justify-center rounded-full bg-secondary/15">
+              <Bot className="h-7 w-7 text-secondary" />
+            </div>
+            <h3 className="text-lg font-medium">Sin agentes todavía</h3>
+            <p className="max-w-sm text-sm text-muted-foreground">
+              Creá tu primer agente y va a empezar a responder automáticamente. Mientras tanto,
+              usá el botón Sugerir dentro de cualquier conversación.
             </p>
-            <Button asChild className="mt-2">
-              <Link href="/ai-agents/new">
-                <Plus className="h-4 w-4" />
-                Crear agente
-              </Link>
-            </Button>
+            <p className="mt-2 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+              usar el botón de arriba a la derecha
+            </p>
           </CardContent>
         </Card>
       ) : (
@@ -99,13 +99,18 @@ export default async function AIAgentsPage() {
                   </CardDescription>
                 </div>
                 <div className="flex items-center gap-2">
-                  {a.is_default && <Badge className="bg-blue-500/15 text-blue-700">Por defecto</Badge>}
-                  {a.auto_reply_enabled && <Badge className="bg-green-500/15 text-green-700">Auto-reply</Badge>}
+                  {a.is_default && <Badge className="bg-primary/15 text-primary">Por defecto</Badge>}
+                  {a.auto_reply_enabled && (
+                    <Badge className="bg-secondary/15 text-secondary">
+                      <Sparkles className="mr-1 h-3 w-3" />
+                      IA activa
+                    </Badge>
+                  )}
                   <Badge variant="outline">{a.provider}</Badge>
                 </div>
               </CardHeader>
               <CardContent className="text-xs text-muted-foreground">
-                Modelo: <code className="rounded bg-muted px-1">{a.model}</code>
+                Modelo: <code className="rounded bg-muted px-1 font-mono">{a.model}</code>
               </CardContent>
             </Card>
           ))}

@@ -96,7 +96,7 @@ export default async function AutomationsPage() {
 }
 
 function StatusBadge({ status }: { status: string }) {
-  if (status === "active") return <Badge className="bg-green-500/15 text-green-700">Activa</Badge>;
+  if (status === "active") return <Badge className="bg-success/15 text-success">Activa</Badge>;
   if (status === "paused") return <Badge variant="secondary">Pausada</Badge>;
   return <Badge variant="outline">Borrador</Badge>;
 }

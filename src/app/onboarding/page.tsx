@@ -31,8 +31,8 @@ export default async function OnboardingPage() {
   return (
     <Card className="w-full max-w-lg">
       <CardHeader>
-        <CardTitle>Bienvenido a Wechat</CardTitle>
-        <CardDescription>Configura tu workspace para empezar</CardDescription>
+        <CardTitle>Bienvenido a Hibox</CardTitle>
+        <CardDescription>Conecta tus canales y crea tu primer agente IA en minutos.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <OnboardingForm defaultName={`Workspace de ${user.email?.split("@")[0] ?? ""}`} />

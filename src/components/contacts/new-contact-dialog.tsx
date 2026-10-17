@@ -169,13 +169,13 @@ export function NewContactDialog({
                 {tags.map((t) => (
                   <span
                     key={t}
-                    className="inline-flex items-center gap-1 rounded-full border bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-900"
+                    className="inline-flex items-center gap-1 rounded-full border bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary"
                   >
                     #{t}
                     <button
                       type="button"
                       onClick={() => setTags(tags.filter((x) => x !== t))}
-                      className="ml-0.5 rounded-full p-0.5 hover:bg-blue-100"
+                      className="ml-0.5 rounded-full p-0.5 hover:bg-primary/20"
                       title={`Quitar ${t}`}
                     >
                       <X className="h-3 w-3" />

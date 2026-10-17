@@ -58,7 +58,7 @@ export async function POST(req: Request) {
       if (!r.ok) {
         const text = await r.text();
         result.recommendations.push(
-          `❌ El System User (ID: ${result.token_owner?.id ?? "?"}) NO está asignado a la app ${expectedAppId}. Ve a business.facebook.com/settings/users → ese System User → sección "Apps" → Add Apps → selecciona "Wechat" → Full Control.`,
+          `❌ El System User (ID: ${result.token_owner?.id ?? "?"}) NO está asignado a la app ${expectedAppId}. Ve a business.facebook.com/settings/users → ese System User → sección "Apps" → Add Apps → selecciona "Hibox" → Full Control.`,
         );
       } else {
         result.recommendations.push("✅ El System User SÍ está asignado a la app. Puede suscribir webhooks.");

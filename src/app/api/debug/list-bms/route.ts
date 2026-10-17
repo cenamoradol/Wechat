@@ -96,7 +96,7 @@ export async function POST() {
     recommendations: targetSU
       ? [
           `✅ Tu System User (${me.id}) está en el BM "${targetSU.bm_name}" (${targetSU.bm_id}).`,
-          `Para asignarlo a la app, ve a business.facebook.com/${targetSU.bm_id}/settings/users/${me.id} → sección "Apps" → "Add Apps" → selecciona "Wechat" (${appId}) → Full Control.`,
+          `Para asignarlo a la app, ve a business.facebook.com/${targetSU.bm_id}/settings/users/${me.id} → sección "Apps" → "Add Apps" → selecciona "Hibox" (${appId}) → Full Control.`,
         ]
       : [
           `⚠️ Tu System User (${me.id}) no aparece en ningún Business Manager que tenga esta app.`,

@@ -268,22 +268,22 @@ function AutomationCanvasInner({
             if (!step) return "#94a3b8";
             // ponytail: dynamic import would be circular; use the same color map directly.
             const colors: Record<string, string> = {
-              send_text: "#2563eb",
-              send_template: "#0891b2",
-              add_tag: "#16a34a",
-              remove_tag: "#ca8a04",
-              set_field: "#9333ea",
-              wait: "#475569",
-              assign_to: "#0ea5e9",
-              set_status: "#64748b",
-              close_conversation: "#374151",
-              webhook: "#ea580c",
-              ai_reply: "#7c3aed",
-              ai_extract: "#db2777",
-              branch: "#0d9488",
-              llm_draft_message: "#a855f7",
-              send_images: "#e11d48",
-              condition: "#059669",
+              send_text: "#F59E0B",
+              send_template: "#14B8A6",
+              add_tag: "#22C55E",
+              remove_tag: "#F8B22B",
+              set_field: "#5EA6F7",
+              wait: "#A8A29E",
+              assign_to: "#38BDF8",
+              set_status: "#A8A29E",
+              close_conversation: "#78716C",
+              webhook: "#F59E0B",
+              ai_reply: "#EC4899",
+              ai_extract: "#EC4899",
+              branch: "#14B8A6",
+              llm_draft_message: "#EC4899",
+              send_images: "#F246B7",
+              condition: "#22C55E",
             };
             return colors[step.type] ?? "#94a3b8";
           }}
@@ -314,7 +314,7 @@ function AutomationCanvasInner({
           <div className="border-t p-3">
             <Button
               variant="outline"
-              className="w-full text-red-600"
+              className="w-full text-destructive"
               onClick={() => {
                 onChange(applyGraphMutation(steps, { kind: "remove", stableId: selectedKey }));
                 setSelectedKey(null);

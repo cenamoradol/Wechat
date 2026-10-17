@@ -15,7 +15,7 @@ export const env = createEnv({
   },
   client: {
     NEXT_PUBLIC_APP_URL: z.string().url(),
-    NEXT_PUBLIC_APP_NAME: z.string().default("Wechat"),
+    NEXT_PUBLIC_APP_NAME: z.string().default("Hibox"),
     NEXT_PUBLIC_SUPABASE_URL: z.string().url(),
     NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().min(1),
     NEXT_PUBLIC_META_APP_ID: z.string().min(1),

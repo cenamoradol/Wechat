@@ -49,9 +49,9 @@ type Channel = { id: string; type: string; display_name: string };
 type Workspace = { id: string; name: string; slug: string; role: string };
 
 const CHANNEL_LABELS: Record<string, { label: string; color: string }> = {
-  whatsapp: { label: "WhatsApp", color: "bg-green-100 text-green-800" },
-  facebook: { label: "Messenger", color: "bg-blue-100 text-blue-800" },
-  instagram: { label: "Instagram", color: "bg-pink-100 text-pink-800" },
+  whatsapp: { label: "WhatsApp", color: "bg-[hsl(var(--channel-whatsapp-bg))] text-[hsl(var(--channel-whatsapp))]" },
+  facebook: { label: "Messenger", color: "bg-[hsl(var(--channel-facebook-bg))] text-[hsl(var(--channel-facebook))]" },
+  instagram: { label: "Instagram", color: "bg-[hsl(var(--channel-instagram-bg))] text-[hsl(var(--channel-instagram))]" },
 };
 
 export function ContactsView({
@@ -359,7 +359,7 @@ export function ContactsView({
                         }
                       }}
                       tabIndex={0}
-                      className={`cursor-pointer transition-colors hover:bg-muted/50 focus:bg-muted/50 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:ring-inset ${isSelected ? "bg-blue-50/50" : ""}`}
+                      className={`cursor-pointer transition-colors hover:bg-muted/50 focus:bg-muted/50 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:ring-inset ${isSelected ? "bg-primary/10" : ""}`}
                     >
                       <td
                         className="w-10 px-2 py-3 text-center"

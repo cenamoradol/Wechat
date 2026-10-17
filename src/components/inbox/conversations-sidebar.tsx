@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/browser";
 import { formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
-import { Archive, MessageSquare } from "lucide-react";
+import { Archive, MessageSquare, MessageCircle, Send, AtSign } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type Conversation = {
@@ -24,16 +24,22 @@ type Conversation = {
   } | null;
 };
 
-const CHANNEL_ICONS: Record<string, string> = {
-  whatsapp: "💬",
-  facebook: "f",
-  instagram: "📷",
+const CHANNEL_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
+  whatsapp: MessageCircle,
+  facebook: Send,
+  instagram: AtSign,
 };
 
-const CHANNEL_LABELS: Record<string, string> = {
+const CHANNEL_LABEL: Record<string, string> = {
   whatsapp: "WhatsApp",
   facebook: "Messenger",
   instagram: "Instagram",
+};
+
+const CHANNEL_TINT: Record<string, string> = {
+  whatsapp: "text-[hsl(var(--channel-whatsapp))]",
+  facebook: "text-[hsl(var(--channel-facebook))]",
+  instagram: "text-[hsl(var(--channel-instagram))]",
 };
 
 const POLL_INTERVAL_MS = 8000;
@@ -183,6 +189,8 @@ export function ConversationsSidebar({
           {conversations.map((c) => {
             const contact = c.contact_channels?.contacts;
             const channelType = c.contact_channels?.channels?.type ?? "whatsapp";
+            const ChannelIcon = CHANNEL_ICONS[channelType] ?? MessageSquare;
+            const channelTint = CHANNEL_TINT[channelType] ?? "text-muted-foreground";
             const isActive = c.id === activeId;
             const name =
               contact?.full_name ||
@@ -202,13 +210,18 @@ export function ConversationsSidebar({
                     c.archived_at && "opacity-70",
                   )}
                 >
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-lg">
-                    {CHANNEL_ICONS[channelType] ?? "💬"}
+                  <div
+                    className={cn(
+                      "flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10",
+                      channelTint,
+                    )}
+                  >
+                    <ChannelIcon className="h-4 w-4" />
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-2">
                       <span className="truncate text-sm font-medium">{name}</span>
-                      <span className="shrink-0 text-[10px] text-muted-foreground">
+                      <span className="shrink-0 font-mono text-[10px] tabular-nums text-muted-foreground">
                         {formatDistanceToNow(new Date(c.last_message_at), {
                           addSuffix: true,
                           locale: es,
@@ -228,17 +241,17 @@ export function ConversationsSidebar({
                       </p>
                     )}
                     <div className="mt-1 flex items-center gap-1">
-                      <span className="rounded bg-muted px-1.5 py-0.5 text-[10px]">
-                        {CHANNEL_LABELS[channelType] ?? channelType}
+                      <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                        {CHANNEL_LABEL[channelType] ?? channelType}
                       </span>
                       {c.archived_at && (
-                        <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-800 inline-flex items-center gap-0.5">
+                        <span className="inline-flex items-center gap-0.5 rounded bg-warning/15 px-1.5 py-0.5 text-[10px] text-warning">
                           <Archive className="h-2.5 w-2.5" />
                           Archivado
                         </span>
                       )}
                       {c.unread_count > 0 && (
-                        <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-blue-500 px-1.5 text-[10px] font-semibold text-white">
+                        <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 font-mono text-[10px] font-semibold tabular-nums text-primary-foreground">
                           {c.unread_count}
                         </span>
                       )}

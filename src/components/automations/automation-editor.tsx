@@ -30,8 +30,8 @@ const TRIGGER_LABELS: Array<{ value: Trigger["type"]; label: string; description
   { value: "contact_created", label: "Contacto nuevo", description: "Cuando llega un contacto nuevo" },
   { value: "tag_added", label: "Etiqueta añadida", description: "Cuando se etiqueta al contacto" },
   { value: "schedule", label: "Programado (cron)", description: "Corre según horario" },
-  { value: "ai_classify", label: "🤖 Clasificar con IA", description: "El LLM decide según un criterio en lenguaje natural" },
-  { value: "llm_condition", label: "🤖 Condición en lenguaje natural", description: "El LLM evalúa una condición contra el mensaje" },
+  { value: "ai_classify", label: "Clasificar con IA", description: "El LLM decide según un criterio en lenguaje natural" },
+  { value: "llm_condition", label: "Condición en lenguaje natural", description: "El LLM evalúa una condición contra el mensaje" },
 ];
 
 export function AutomationEditor({ initial }: Props) {

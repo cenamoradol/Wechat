@@ -90,7 +90,7 @@ export function CommandPalette() {
         className="w-full max-w-xl overflow-hidden rounded-lg border bg-card shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <Command label="Wechat command palette" className="flex flex-col">
+        <Command label="Hibox command palette" className="flex flex-col">
           <div className="flex items-center border-b px-3">
             <Command.Input
               autoFocus

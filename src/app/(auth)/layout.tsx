@@ -1,16 +1,15 @@
-import Link from "next/link";
-import { env } from "@/lib/env";
+import type { ReactNode } from "react";
 
-export default function AuthLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-muted/30 px-4">
-      <Link href="/" className="mb-8 flex items-center gap-2">
-        <div className="bg-primary text-primary-foreground grid h-10 w-10 place-items-center rounded-lg font-bold">
-          W
-        </div>
-        <span className="text-xl font-semibold">{env.NEXT_PUBLIC_APP_NAME}</span>
-      </Link>
-      {children}
-    </div>
-  );
+/**
+ * Auth route-group layout.
+ *
+ * Intentionally minimal — each auth page renders its own layout
+ * so login (the portada) and signup can have distinct compositions
+ * without fighting the shared shell.
+ *
+ * Provides the dark canvas and prevents inherited chrome from the
+ * workspace layout from leaking in (e.g. the sidebar/topbar).
+ */
+export default function AuthLayout({ children }: { children: ReactNode }) {
+  return <div className="min-h-svh bg-background text-foreground">{children}</div>;
 }

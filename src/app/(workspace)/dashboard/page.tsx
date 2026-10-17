@@ -106,7 +106,7 @@ export default async function DashboardPage() {
                 <Inbox className="mr-2 h-4 w-4" />
                 Abrir el inbox
                 {totalUnread > 0 && (
-                  <span className="ml-auto rounded-full bg-blue-500 px-2 py-0.5 text-xs text-white">
+                  <span className="ml-auto rounded-full bg-primary px-2 py-0.5 text-xs text-primary-foreground">
                     {totalUnread}
                   </span>
                 )}
@@ -174,7 +174,7 @@ function KpiCard({
         <Icon className="h-3.5 w-3.5 text-muted-foreground" />
       </div>
       <div
-        className={`mt-2 text-3xl font-semibold tabular-nums ${highlight ? "text-blue-600" : ""}`}
+        className={`mt-2 text-3xl font-semibold tabular-nums ${highlight ? "text-primary" : ""}`}
       >
         {value}
       </div>

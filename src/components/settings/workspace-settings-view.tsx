@@ -93,7 +93,7 @@ export function WorkspaceSettingsView({
                   </span>
                 )}
                 {unlimited && (
-                  <span className="ml-1 rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-800">
+                  <span className="ml-1 rounded bg-warning/15 px-1.5 py-0.5 text-xs text-warning">
                     Sin límite
                   </span>
                 )}
@@ -102,13 +102,13 @@ export function WorkspaceSettingsView({
             <div className="h-2 overflow-hidden rounded-full bg-muted">
               <div
                 className={`h-full ${
-                  wouldExceed ? "bg-red-500" : usagePct > 80 ? "bg-amber-500" : "bg-primary"
+                  wouldExceed ? "bg-destructive" : usagePct > 80 ? "bg-warning" : "bg-primary"
                 }`}
                 style={{ width: unlimited ? "100%" : `${usagePct}%` }}
               />
             </div>
             {wouldExceed && (
-              <p className="mt-2 flex items-start gap-1 text-xs text-amber-700">
+              <p className="mt-2 flex items-start gap-1 text-xs text-warning">
                 <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
                 Tu uso actual ({formatBytes(usageBytes)}) excede el límite actual
                 ({formatBytes(limitBytes)}). Los nuevos archivos se bloquearán hasta

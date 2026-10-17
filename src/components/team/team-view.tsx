@@ -241,15 +241,15 @@ export function TeamView({
           </div>
 
           {latestInvite && (
-            <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm">
-              <p className="mb-2 font-medium text-blue-900">¡Invitación creada! Comparte este enlace:</p>
+            <div className="rounded-lg border border-accent/40 bg-accent/10 p-4 text-sm">
+              <p className="mb-2 font-medium text-accent">Invitación creada. Comparte este enlace:</p>
               <div className="flex gap-2">
-                <Input value={latestInvite.url} readOnly className="bg-white font-mono text-xs" />
+                <Input value={latestInvite.url} readOnly className="bg-background font-mono text-xs" />
                 <Button onClick={onCopy} variant="outline" className="shrink-0">
                   {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                 </Button>
               </div>
-              <p className="mt-2 text-xs text-blue-700">
+              <p className="mt-2 text-xs text-muted-foreground">
                 Expira: {new Date(latestInvite.expiresAt).toLocaleString()}
               </p>
             </div>
@@ -320,7 +320,7 @@ export function TeamView({
                   <tr key={inv.id}>
                     <td className="px-4 py-3 text-muted-foreground">{inv.email ?? "—"}</td>
                     <td className="px-4 py-3">
-                      <Badge className="bg-green-100 text-green-800">Aceptada</Badge>
+                      <Badge className="bg-success/15 text-success">Aceptada</Badge>
                     </td>
                     <td className="px-4 py-3 text-xs text-muted-foreground">
                       {inv.accepted_at ? new Date(inv.accepted_at).toLocaleString() : "—"}

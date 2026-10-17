@@ -4,48 +4,96 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    /* === Terminal Nocturno — dark-first === */
+    /* Canvas: warm black, never pure #000 */
+    --background: 30 9% 6%;            /* #0F0E0C */
+    --foreground: 36 23% 87%;         /* #E7E2D8 */
+
+    /* Surfaces — steps in tone, never borders-as-dividers */
+    --card: 30 8% 9%;                 /* #161412 */
+    --card-foreground: 36 23% 87%;
+    --popover: 30 8% 11%;
+    --popover-foreground: 36 23% 87%;
+    --surface: 30 9% 6%;
+    --surface-container-low: 30 8% 9%;
+    --surface-container: 30 7% 12%;
+    --surface-container-high: 30 6% 15%;
+    --surface-container-highest: 30 5% 18%;
+    --muted: 30 6% 15%;
+    --muted-foreground: 36 12% 65%;   /* #A8A29E */
+    --border: 30 8% 20%;              /* #322F2C */
+    --input: 30 8% 20%;
+    --ring: 38 92% 50%;
+
+    /* === Brand primary (Amber 500) — the only accent === */
+    --primary: 38 92% 50%;            /* #F59E0B */
+    --primary-foreground: 30 89% 8%; /* #1F1300 */
+    --primary-container: 35 75% 16%;  /* deep amber tint */
+    --on-primary-container: 38 95% 75%; /* #FCD34D */
+    --inverse-primary: 30 89% 8%;
+
+    /* === Brand secondary (Pink 500) — AI only, kept === */
+    --secondary: 330 89% 60%;         /* #EC4899 */
+    --secondary-foreground: 0 0% 100%;
+    --secondary-container: 333 65% 18%;
+    --on-secondary-container: 327 88% 92%;
+
+    /* === Brand tertiary (Teal 500) — invite-only CTA, kept === */
+    --accent: 174 84% 35%;            /* #14B8A6 */
+    --accent-foreground: 0 0% 100%;
+    --accent-container: 175 65% 19%;
+    --on-accent-container: 166 76% 88%;
+
+    /* === Destructive === */
+    --destructive: 0 75% 60%;        /* #EF4444 brighter for dark */
+    --destructive-foreground: 0 0% 100%;
+
+    /* === Status (semantic) — brighter for dark === */
+    --success: 142 71% 45%;           /* #22C55E */
+    --success-foreground: 0 0% 100%;
+    --success-container: 142 50% 14%;
+    --warning: 38 92% 55%;            /* #F8B22B */
+    --warning-foreground: 30 89% 8%;
+    --warning-container: 38 60% 14%;
+    --info: 199 89% 58%;              /* #38BDF8 */
+    --info-foreground: 30 89% 8%;
+    --info-container: 199 60% 14%;
+
+    /* === Conversation status === */
+    --status-open: 38 92% 55%;        /* amber = active, needs me */
+    --status-open-bg: 38 60% 14%;
+    --status-pending: 38 92% 55%;
+    --status-pending-bg: 38 60% 14%;
+    --status-closed: 36 8% 50%;
+    --status-closed-bg: 30 6% 15%;
+
+    /* === Channel brand colors — bright pop on dark === */
+    --channel-whatsapp: 142 71% 50%;  /* #22C55E */
+    --channel-whatsapp-bg: 142 50% 14%;
+    --channel-facebook: 214 95% 65%;  /* #5EA6F7 */
+    --channel-facebook-bg: 214 60% 16%;
+    --channel-instagram: 333 85% 65%; /* #F246B7 */
+    --channel-instagram-bg: 333 50% 16%;
+
+    /* Terminal radii — slightly tighter, no soft pills */
     --radius: 0.5rem;
   }
 
+  /* Keep dark identical if a class is added — dark is the default. */
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
+    --background: 30 9% 6%;
+    --foreground: 36 23% 87%;
+    --card: 30 8% 9%;
+    --card-foreground: 36 23% 87%;
+    --popover: 30 8% 11%;
+    --popover-foreground: 36 23% 87%;
+    --primary: 38 92% 50%;
+    --primary-foreground: 30 89% 8%;
+    --muted: 30 6% 15%;
+    --muted-foreground: 36 12% 65%;
+    --border: 30 8% 20%;
+    --input: 30 8% 20%;
+    --ring: 38 92% 50%;
   }
 }
 
@@ -54,6 +102,18 @@
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "ss01", "cv11", "calt";
+    /* IBM Plex Sans is the body face — set via next/font in layout.tsx */
+  }
+  /* Terminal-style focus ring (amber, no glow) */
+  :focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+  }
+  /* Selection: amber on dark */
+  ::selection {
+    background: hsl(var(--primary) / 0.35);
+    color: hsl(var(--foreground));
   }
 }

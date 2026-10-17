@@ -189,8 +189,8 @@ async function ActiveThread({
         userRole={userRole}
       />
       {isArchived && (
-        <div className="border-b bg-amber-50 px-4 py-2 text-xs text-amber-900">
-          📦 Esta conversación está archivada. No aparece en el inbox principal. Los
+        <div className="border-b bg-warning/10 px-4 py-2 text-xs text-warning">
+          Esta conversación está archivada. No aparece en el inbox principal. Los
           archivos multimedia fueron eliminados para ahorrar espacio.
         </div>
       )}

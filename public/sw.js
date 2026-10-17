@@ -1,4 +1,4 @@
-// Wechat web-push service worker.
+// Hibox web-push service worker.
 // Receives push events from the server and shows native OS notifications.
 // Clicking a notification focuses the app and navigates to the relevant URL.
 
@@ -14,7 +14,7 @@ self.addEventListener("activate", (event) => {
 });
 
 self.addEventListener("push", (event) => {
-  let payload = { title: "Wechat", body: "", href: "/" };
+  let payload = { title: "Hibox", body: "", href: "/" };
   try {
     if (event.data) payload = { ...payload, ...event.data.json() };
   } catch {

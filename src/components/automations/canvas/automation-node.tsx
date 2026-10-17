@@ -41,7 +41,7 @@ function AutomationNodeImpl(props: NodeProps) {
         selected
           ? "border-[var(--nc)] shadow-[0_0_0_1px_var(--nc),0_14px_36px_-12px_var(--nc-ring)]"
           : hasError
-            ? "border-red-500"
+            ? "border-destructive"
             : "border-border hover:border-[var(--nc-ring)]",
       )}
     >
@@ -66,17 +66,17 @@ function AutomationNodeImpl(props: NodeProps) {
             {summarizeStep(step)}
           </div>
         </div>
-        {hasError && <AlertCircle className="h-4 w-4 shrink-0 text-red-500" />}
+        {hasError && <AlertCircle className="h-4 w-4 shrink-0 text-destructive" />}
       </div>
 
       {isBrancher && (
         <div className="mt-2 flex items-center gap-2 text-[10px] text-muted-foreground">
           <span className="flex items-center gap-1">
-            <CheckCircle2 className="h-3 w-3 text-green-600" />
+            <CheckCircle2 className="h-3 w-3 text-success" />
             {branchLabel.split("/")[0]}
           </span>
           <span className="flex items-center gap-1">
-            <XCircle className="h-3 w-3 text-red-500" />
+            <XCircle className="h-3 w-3 text-destructive" />
             {branchLabel.split("/")[1]}
           </span>
         </div>

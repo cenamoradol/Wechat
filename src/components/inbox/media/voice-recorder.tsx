@@ -134,9 +134,9 @@ export function VoiceRecorder({
   return (
     <div
       className={cn(
-        "flex items-center gap-2 rounded-md border bg-red-50 px-2 py-1",
-        state === "recording" && "ring-2 ring-red-400",
-        state === "transcoding" && "ring-2 ring-amber-400",
+        "flex items-center gap-2 rounded-md border bg-destructive/10 px-2 py-1",
+        state === "recording" && "ring-2 ring-destructive/60",
+        state === "transcoding" && "ring-2 ring-warning/60",
       )}
     >
       {state === "idle" && (
@@ -152,12 +152,12 @@ export function VoiceRecorder({
       )}
       {state === "recording" && (
         <>
-          <span className="flex h-2 w-2 animate-pulse rounded-full bg-red-500" />
-          <span className="text-xs font-mono tabular-nums">
+          <span className="flex h-2 w-2 animate-pulse rounded-full bg-destructive" />
+          <span className="font-mono text-xs tabular-nums">
             {formatTime(elapsed)}
           </span>
           <Button type="button" variant="ghost" size="icon" onClick={stop} title="Detener">
-            <Square className="h-4 w-4 fill-red-500 text-red-500" />
+            <Square className="h-4 w-4 fill-destructive text-destructive" />
           </Button>
           <Button type="button" variant="ghost" size="icon" onClick={cancel} title="Cancelar">
             <X className="h-4 w-4" />
@@ -166,7 +166,7 @@ export function VoiceRecorder({
       )}
       {state === "transcoding" && (
         <>
-          <Loader2 className="h-3.5 w-3.5 animate-spin text-amber-600" />
+          <Loader2 className="h-3.5 w-3.5 animate-spin text-warning" />
           <span className="text-xs">Convirtiendo a MP3 (primera vez puede tardar ~10s)…</span>
         </>
       )}

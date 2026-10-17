@@ -96,8 +96,8 @@ function ProviderCard({ provider, configured, lastUsed }: { provider: typeof PRO
         {!editing && configured ? (
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 text-sm">
-              <span className="inline-flex h-2 w-2 rounded-full bg-green-500" />
-              <span className="font-medium text-green-700">Configurada</span>
+              <span className="inline-flex h-2 w-2 rounded-full bg-success" />
+              <span className="font-medium text-success">Configurada</span>
               {lastUsed && <span className="text-xs text-muted-foreground">· usada {new Date(lastUsed).toLocaleString("es")}</span>}
             </div>
             <div className="flex items-center gap-2">

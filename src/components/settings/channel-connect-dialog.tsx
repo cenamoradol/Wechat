@@ -36,7 +36,7 @@ export function ChannelConnectDialog() {
         <DialogHeader>
           <DialogTitle>Conectar canal</DialogTitle>
           <DialogDescription>
-            Conecta WhatsApp, Facebook Messenger e Instagram en un solo paso (Embedded Signup v4)
+            Conecta WhatsApp, Messenger e Instagram en un solo paso (Embedded Signup v4)
             o de forma manual.
           </DialogDescription>
         </DialogHeader>
@@ -72,7 +72,7 @@ export function ChannelConnectDialog() {
                   <strong>Antes de conectar, agrega este Redirect URI exacto en tu app de Meta:</strong>
                 </p>
                 <code className="block break-all rounded bg-muted px-2 py-1 text-[11px]">
-                  https://wechat-eight-sigma.vercel.app/api/oauth/meta/callback
+                  https://hibox.app/api/oauth/meta/callback
                 </code>
                 <p>
                   En <strong>developers.facebook.com → tu app → Facebook Login → Settings</strong> (o en

@@ -271,8 +271,8 @@ export async function sendMediaMessageAction(
     .update({
       last_message_at: new Date().toISOString(),
       last_message_preview: parsed.data.caption
-        ? `📎 ${parsed.data.caption.slice(0, 100)}`
-        : `📎 ${parsed.data.fileName}`,
+        ? `Adjunto: ${parsed.data.caption.slice(0, 100)}`
+        : `Adjunto: ${parsed.data.fileName}`,
     })
     .eq("id", parsed.data.conversationId);
 

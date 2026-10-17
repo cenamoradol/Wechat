@@ -82,7 +82,7 @@ export async function POST() {
     { object: "whatsapp_business_account", fields: ["messages", "message_deliveries", "message_reads"] },
     { object: "instagram", fields: ["messages", "messaging_postbacks", "message_deliveries", "message_reads"] },
   ];
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://wechat-eight-sigma.vercel.app";
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://hibox.app";
 
   for (const o of objects) {
     const r = await fetch(

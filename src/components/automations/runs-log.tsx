@@ -22,9 +22,9 @@ type Run = {
 };
 
 function StatusIcon({ status }: { status: string }) {
-  if (status === "succeeded") return <CheckCircle2 className="h-4 w-4 text-green-600" />;
-  if (status === "failed") return <XCircle className="h-4 w-4 text-red-600" />;
-  if (status === "running") return <Loader2 className="h-4 w-4 animate-spin text-blue-600" />;
+  if (status === "succeeded") return <CheckCircle2 className="h-4 w-4 text-success" />;
+  if (status === "failed") return <XCircle className="h-4 w-4 text-destructive" />;
+  if (status === "running") return <Loader2 className="h-4 w-4 animate-spin text-info" />;
   return <Clock className="h-4 w-4 text-muted-foreground" />;
 }
 
@@ -77,7 +77,7 @@ function RunRow({ run }: { run: Run }) {
                   <span className="font-medium">{l.type}</span>
                   <span className="text-muted-foreground">{l.duration_ms}ms</span>
                   {l.status === "failed" ? (
-                    <span className="flex items-center gap-1 text-red-600">
+                    <span className="flex items-center gap-1 text-destructive">
                       <AlertTriangle className="h-3 w-3" /> {l.error}
                     </span>
                   ) : l.output ? (

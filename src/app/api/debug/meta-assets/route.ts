@@ -49,7 +49,7 @@ export async function GET() {
   const expectedAppId = process.env.NEXT_PUBLIC_META_APP_ID ?? "";
 
   const result: DebugResult = {
-    app: { id: expectedAppId, name: "Wechat" },
+    app: { id: expectedAppId, name: "Hibox" },
     token_used: ch ? "whatsapp_channel" : "none",
     bms: [],
     pages: [],

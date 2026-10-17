@@ -49,23 +49,26 @@ export type NodeColor = {
 
 // ponytail: per-type palette. Single source — a tweak here updates every
 // node + the +Add menu legend. Inspired by wacrm's nodeColors().
+// 2026-10-16: removed all violet/indigo family to honor
+// "no purple gradients, no typical AI design". Replaced with the Hibox
+// amber-primary / pink-secondary / teal-tertiary / status palette.
 export const NODE_COLORS: Record<AutomationNodeType, NodeColor> = {
-  send_text: { solid: "#2563eb", soft: "#dbeafe", ring: "#93c5fd", text: "#1e3a8a" },
-  send_template: { solid: "#0891b2", soft: "#cffafe", ring: "#67e8f9", text: "#164e63" },
-  add_tag: { solid: "#16a34a", soft: "#dcfce7", ring: "#86efac", text: "#14532d" },
-  remove_tag: { solid: "#ca8a04", soft: "#fef9c3", ring: "#fde047", text: "#713f12" },
-  set_field: { solid: "#9333ea", soft: "#f3e8ff", ring: "#d8b4fe", text: "#581c87" },
-  wait: { solid: "#475569", soft: "#f1f5f9", ring: "#cbd5e1", text: "#0f172a" },
-  assign_to: { solid: "#0ea5e9", soft: "#e0f2fe", ring: "#7dd3fc", text: "#0c4a6e" },
-  set_status: { solid: "#64748b", soft: "#f1f5f9", ring: "#cbd5e1", text: "#0f172a" },
-  close_conversation: { solid: "#374151", soft: "#f3f4f6", ring: "#d1d5db", text: "#111827" },
-  webhook: { solid: "#ea580c", soft: "#ffedd5", ring: "#fdba74", text: "#7c2d12" },
-  ai_reply: { solid: "#7c3aed", soft: "#ede9fe", ring: "#c4b5fd", text: "#4c1d95" },
-  ai_extract: { solid: "#db2777", soft: "#fce7f3", ring: "#f9a8d4", text: "#831843" },
-  branch: { solid: "#0d9488", soft: "#ccfbf1", ring: "#5eead4", text: "#134e4a" },
-  llm_draft_message: { solid: "#a855f7", soft: "#f3e8ff", ring: "#d8b4fe", text: "#581c87" },
-  send_images: { solid: "#e11d48", soft: "#ffe4e6", ring: "#fda4af", text: "#881337" },
-  condition: { solid: "#059669", soft: "#d1fae5", ring: "#6ee7b7", text: "#064e3b" },
+  send_text: { solid: "#F59E0B", soft: "#3A2A0E", ring: "#FCD34D", text: "#FCD34D" },
+  send_template: { solid: "#14B8A6", soft: "#0E3D38", ring: "#5EEAD4", text: "#CCFBF1" },
+  add_tag: { solid: "#22C55E", soft: "#0F2818", ring: "#86EFAC", text: "#86EFAC" },
+  remove_tag: { solid: "#F8B22B", soft: "#3A2A0E", ring: "#FDE68A", text: "#FDE68A" },
+  set_field: { solid: "#5EA6F7", soft: "#0F1E33", ring: "#93C5FD", text: "#93C5FD" },
+  wait: { solid: "#A8A29E", soft: "#1F1C19", ring: "#D6D3D1", text: "#D6D3D1" },
+  assign_to: { solid: "#38BDF8", soft: "#0E2E3D", ring: "#7DD3FC", text: "#7DD3FC" },
+  set_status: { solid: "#A8A29E", soft: "#1F1C19", ring: "#D6D3D1", text: "#D6D3D1" },
+  close_conversation: { solid: "#78716C", soft: "#1F1C19", ring: "#A8A29E", text: "#A8A29E" },
+  webhook: { solid: "#F59E0B", soft: "#3A2A0E", ring: "#FCD34D", text: "#FCD34D" },
+  ai_reply: { solid: "#EC4899", soft: "#3F1428", ring: "#F9A8D4", text: "#FCE7F3" },
+  ai_extract: { solid: "#EC4899", soft: "#3F1428", ring: "#F9A8D4", text: "#FCE7F3" },
+  branch: { solid: "#14B8A6", soft: "#0E3D38", ring: "#5EEAD4", text: "#CCFBF1" },
+  llm_draft_message: { solid: "#EC4899", soft: "#3F1428", ring: "#F9A8D4", text: "#FCE7F3" },
+  send_images: { solid: "#F246B7", soft: "#2E0F22", ring: "#F9A8D4", text: "#FCE7F3" },
+  condition: { solid: "#22C55E", soft: "#0F2818", ring: "#86EFAC", text: "#86EFAC" },
 };
 
 export const NODE_META: Record<

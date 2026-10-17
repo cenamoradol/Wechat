@@ -177,7 +177,7 @@ export function NotificationsForm() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
             {subscribed ? (
-              <Bell className="h-4 w-4 text-green-600" />
+              <Bell className="h-4 w-4 text-success" />
             ) : (
               <BellOff className="h-4 w-4 text-muted-foreground" />
             )}
@@ -191,14 +191,14 @@ export function NotificationsForm() {
           {!mounted ? (
             <div className="text-sm text-muted-foreground">Cargando…</div>
           ) : !serverEnabled ? (
-            <p className="text-sm text-amber-700">
+            <p className="text-sm text-warning">
               El servidor no tiene claves VAPID configuradas. El owner debe
               agregar <code className="rounded bg-muted px-1">NEXT_PUBLIC_VAPID_PUBLIC_KEY</code>{" "}
               y <code className="rounded bg-muted px-1">VAPID_PRIVATE_KEY</code>.
             </p>
           ) : subscribed ? (
-            <div className="flex items-center justify-between gap-3 rounded-md border bg-green-50 p-3 text-sm">
-              <div className="flex items-center gap-2 text-green-800">
+            <div className="flex items-center justify-between gap-3 rounded-md border border-success/40 bg-success/10 p-3 text-sm">
+              <div className="flex items-center gap-2 text-success">
                 <Check className="h-4 w-4" />
                 Activadas en este navegador.
               </div>

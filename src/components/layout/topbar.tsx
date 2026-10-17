@@ -12,7 +12,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -46,7 +45,6 @@ export function Topbar({
 
   const active = workspaces.find((w) => w.id === activeWorkspaceId) ?? workspaces[0];
 
-  // Close dropdown on outside click
   useEffect(() => {
     function handler(e: MouseEvent) {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
@@ -82,27 +80,29 @@ export function Topbar({
   };
 
   return (
-    <header className="flex h-14 items-center justify-between gap-4 border-b bg-background px-4 sm:px-6">
-      {/* Workspace switcher */}
+    <header className="flex h-14 items-center justify-between gap-4 border-b border-border bg-surface-container-low px-4 sm:px-6">
+      {/* Workspace switcher — terminal underline style */}
       <div className="relative" ref={ref}>
         <button
           type="button"
           onClick={() => setOpen((o) => !o)}
-          className="flex items-center gap-2 rounded-md border bg-card px-3 py-1.5 text-sm font-medium shadow-sm transition-colors hover:bg-accent"
+          className="group flex min-h-11 items-center gap-2 rounded-sm border border-border bg-transparent px-3 text-sm font-medium transition-colors hover:border-primary hover:text-foreground"
           disabled={switchPending}
         >
-          <div className="flex h-6 w-6 items-center justify-center rounded bg-primary text-primary-foreground text-xs font-bold">
-            {active?.name?.slice(0, 1)?.toUpperCase() ?? "W"}
-          </div>
-          <span className="hidden sm:inline">{active?.name ?? "Sin workspace"}</span>
+          <span className="flex h-5 w-5 items-center justify-center rounded-sm bg-primary font-mono text-[11px] font-bold text-primary-foreground">
+            {active?.name?.slice(0, 1)?.toUpperCase() ?? "H"}
+          </span>
+          <span className="font-mono text-xs uppercase tracking-wider">
+            {active?.name ?? "sin_workspace"}
+          </span>
           <ChevronDown className="h-3.5 w-3.5 opacity-60" />
         </button>
 
         {open && (
-          <div className="absolute left-0 top-full z-50 mt-2 w-72 rounded-md border bg-card shadow-lg">
+          <div className="absolute left-0 top-full z-50 mt-1 w-72 rounded-sm border border-border bg-popover">
             <div className="p-2">
-              <div className="px-2 py-1 text-xs font-semibold uppercase text-muted-foreground">
-                Tus workspaces
+              <div className="px-2 py-1 font-mono text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                // tus_workspaces
               </div>
               <ul className="max-h-72 overflow-y-auto">
                 {workspaces.map((w) => (
@@ -110,12 +110,12 @@ export function Topbar({
                     <button
                       type="button"
                       onClick={() => onSwitch(w.id)}
-                      className={`flex w-full items-center justify-between gap-2 rounded px-2 py-2 text-left text-sm hover:bg-accent ${
-                        w.id === activeWorkspaceId ? "bg-accent" : ""
+                      className={`flex w-full items-center justify-between gap-2 rounded-sm px-2 py-2 text-left text-sm transition-colors hover:bg-surface-container ${
+                        w.id === activeWorkspaceId ? "bg-primary/10 text-foreground" : ""
                       }`}
                     >
                       <span className="truncate">{w.name}</span>
-                      <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] uppercase">
+                      <span className="rounded-sm border border-border bg-surface-container px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
                         {w.role}
                       </span>
                     </button>
@@ -134,7 +134,7 @@ export function Topbar({
                   setShowCreate(true);
                   setOpen(false);
                 }}
-                className="flex w-full items-center gap-2 rounded px-2 py-2 text-left text-sm hover:bg-accent"
+                className="flex w-full items-center gap-2 rounded-sm px-2 py-2 text-left text-sm transition-colors hover:bg-surface-container"
               >
                 <Plus className="h-4 w-4" />
                 Nuevo workspace para cliente
@@ -142,7 +142,7 @@ export function Topbar({
               <Link
                 href="/team"
                 onClick={() => setOpen(false)}
-                className="flex items-center gap-2 rounded px-2 py-2 text-sm hover:bg-accent"
+                className="flex items-center gap-2 rounded-sm px-2 py-2 text-sm transition-colors hover:bg-surface-container"
               >
                 <Users className="h-4 w-4" />
                 Equipo e invitaciones
@@ -150,7 +150,7 @@ export function Topbar({
               <Link
                 href="/settings"
                 onClick={() => setOpen(false)}
-                className="flex items-center gap-2 rounded px-2 py-2 text-sm hover:bg-accent"
+                className="flex items-center gap-2 rounded-sm px-2 py-2 text-sm transition-colors hover:bg-surface-container"
               >
                 <Settings className="h-4 w-4" />
                 Configuración
@@ -171,7 +171,7 @@ export function Topbar({
               <Label htmlFor="workspace-name">Nombre del cliente / empresa</Label>
               <Input
                 id="workspace-name"
-                placeholder="ACME Corp"
+                placeholder="acme_corp"
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
                 onKeyDown={(e) => {
@@ -194,9 +194,13 @@ export function Topbar({
 
       {/* User menu */}
       <div className="flex items-center gap-3">
-        <div className="text-right text-sm leading-tight hidden sm:block">
+        <div className="hidden text-right text-sm leading-tight sm:block">
           <div className="font-medium">{userName ?? "Usuario"}</div>
-          {userEmail && <div className="text-xs text-muted-foreground">{userEmail}</div>}
+          {userEmail && (
+            <div className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+              {userEmail}
+            </div>
+          )}
         </div>
         <Button
           variant="ghost"
@@ -208,6 +212,8 @@ export function Topbar({
             })
           }
           title="Cerrar sesión"
+          aria-label="Cerrar sesión"
+          className="min-h-11 min-w-11"
         >
           <LogOut className="h-4 w-4" />
         </Button>

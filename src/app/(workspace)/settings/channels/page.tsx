@@ -39,27 +39,27 @@ export default async function ChannelsPage({
         <div>
           <h1 className="text-2xl font-semibold">Canales</h1>
           <p className="text-sm text-muted-foreground">
-            Conecta WhatsApp, Facebook Messenger e Instagram para empezar a recibir mensajes.
+            Conecta WhatsApp, Messenger e Instagram para empezar a recibir mensajes.
           </p>
         </div>
         <ChannelConnectDialog />
       </div>
 
       {connected && (
-        <div className="rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
-          ✅ Conectados {connected} canal(es). Si falta WhatsApp, configúralo en la pestaña WhatsApp.
+        <div className="rounded-md border border-success/40 bg-success/10 px-4 py-3 text-sm text-success">
+          Conectados {connected} canal(es). Si falta WhatsApp, configúralo en la pestaña WhatsApp.
         </div>
       )}
       {error && (
-        <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">
-          ❌ Error: {error}
+        <div className="rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          Error: {error}
         </div>
       )}
 
       <Tabs defaultValue="whatsapp">
         <TabsList>
           <TabsTrigger value="whatsapp">WhatsApp ({byType.whatsapp.length})</TabsTrigger>
-          <TabsTrigger value="facebook">Facebook ({byType.facebook.length})</TabsTrigger>
+          <TabsTrigger value="facebook">Messenger ({byType.facebook.length})</TabsTrigger>
           <TabsTrigger value="instagram">Instagram ({byType.instagram.length})</TabsTrigger>
         </TabsList>
 
@@ -144,8 +144,8 @@ async function WebhookEventsDebug() {
         <li key={e.id} className="flex items-center justify-between font-mono">
           <span>{new Date(e.received_at).toLocaleString()}</span>
           <span>{e.type}</span>
-          <span>{e.processed ? "✅" : "❌"}</span>
-          {e.error && <span className="text-red-600">{e.error}</span>}
+          <span>{e.processed ? "ok" : "error"}</span>
+          {e.error && <span className="text-destructive">{e.error}</span>}
         </li>
       ))}
     </ul>
@@ -153,5 +153,5 @@ async function WebhookEventsDebug() {
 }
 
 function labelFor(t: "whatsapp" | "facebook" | "instagram") {
-  return { whatsapp: "WhatsApp", facebook: "Facebook", instagram: "Instagram" }[t];
+  return { whatsapp: "WhatsApp", facebook: "Messenger", instagram: "Instagram" }[t];
 }

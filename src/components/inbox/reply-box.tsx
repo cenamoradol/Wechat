@@ -204,14 +204,14 @@ export function ReplyBox({ conversationId }: { conversationId: string }) {
           </div>
         )}
         {isDragging && (
-          <div className="border-2 border-dashed border-primary bg-primary/5 p-4 text-center text-xs font-medium text-primary">
+          <div className="border-2 border-dashed border-primary bg-primary/10 p-4 text-center text-xs font-medium text-primary">
             Suelta el archivo aquí para adjuntarlo
           </div>
         )}
         {aiSuggest && (
-          <div className="border-t bg-primary/5 p-3">
+          <div className="border-t bg-secondary/10 p-3">
             <div className="mb-2 flex items-center justify-between">
-              <p className="flex items-center gap-1.5 text-xs font-medium text-primary">
+              <p className="flex items-center gap-1.5 text-xs font-medium text-secondary">
                 <Sparkles className="h-3.5 w-3.5" />
                 Sugerencia de IA
               </p>
@@ -226,7 +226,7 @@ export function ReplyBox({ conversationId }: { conversationId: string }) {
             <p className="whitespace-pre-wrap text-sm">{aiSuggest.text}</p>
             {aiSuggest.sources.length > 0 && (
               <p className="mt-2 text-xs text-muted-foreground">
-                📚 {aiSuggest.sources.map((s) => s.title).join(", ")}
+                Fuentes: {aiSuggest.sources.map((s) => s.title).join(", ")}
               </p>
             )}
             <div className="mt-2 flex gap-2">
@@ -255,7 +255,7 @@ export function ReplyBox({ conversationId }: { conversationId: string }) {
             onClick={() => setShowRecorder((v) => !v)}
             disabled={isPending}
           >
-            <Mic className={cn("h-4 w-4", showRecorder && "text-red-500")} />
+            <Mic className={cn("h-4 w-4", showRecorder && "text-destructive")} />
           </Button>
           <Button
             type="button"
@@ -265,7 +265,7 @@ export function ReplyBox({ conversationId }: { conversationId: string }) {
             onClick={onSuggest}
             disabled={isPending || isSuggesting}
           >
-            {isSuggesting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4 text-primary" />}
+            {isSuggesting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4 text-secondary" />}
           </Button>
           <Textarea
             ref={ref}

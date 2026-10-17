@@ -42,7 +42,7 @@ export default async function WorkspaceLayout({
   ]);
 
   return (
-    <div className="flex h-screen bg-background">
+    <div className="flex h-svh bg-background">
       <Sidebar />
       <div className="flex min-w-0 flex-1 flex-col">
         <Topbar

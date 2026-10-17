@@ -29,14 +29,22 @@ const nav = [
 export function Sidebar() {
   const pathname = usePathname();
   return (
-    <aside className="hidden w-60 shrink-0 border-r bg-background md:block">
-      <div className="flex h-14 items-center gap-2 border-b px-4">
-        <div className="bg-primary text-primary-foreground grid h-8 w-8 place-items-center rounded-md font-bold">
-          W
+    <aside className="hidden w-60 shrink-0 border-r border-border bg-surface-container-low md:flex md:flex-col">
+      {/* Brand row — terminal header style */}
+      <div className="flex h-14 items-center gap-3 border-b border-border px-4">
+        <div className="flex h-7 w-7 items-center justify-center rounded-sm bg-primary font-mono text-sm font-bold text-primary-foreground">
+          H
         </div>
-        <span className="font-semibold">Wechat</span>
+        <div className="flex flex-col leading-tight">
+          <span className="text-sm font-semibold tracking-tight">Hibox</span>
+          <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+            agentes.ia.responden
+          </span>
+        </div>
       </div>
-      <nav className="flex flex-col gap-1 p-3">
+
+      {/* Nav — left rail of amber for active item, no card fill */}
+      <nav className="flex flex-1 flex-col gap-0.5 p-2">
         {nav.map((item) => {
           const active = pathname.startsWith(item.href);
           const Icon = item.icon;
@@ -45,18 +53,37 @@ export function Sidebar() {
               key={item.href}
               href={item.href}
               className={cn(
-                "flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
+                "group relative flex h-10 items-center gap-3 rounded-sm px-3 text-sm transition-colors",
                 active
-                  ? "bg-accent text-accent-foreground"
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                  ? "bg-primary/10 text-foreground"
+                  : "text-muted-foreground hover:bg-surface-container hover:text-foreground",
               )}
             >
-              <Icon className="h-4 w-4" />
-              {item.label}
+              {active && (
+                <span
+                  aria-hidden
+                  className="absolute left-0 top-1.5 h-7 w-0.5 bg-primary"
+                />
+              )}
+              <Icon
+                className={cn(
+                  "h-4 w-4 shrink-0",
+                  active ? "text-primary" : "text-muted-foreground",
+                )}
+              />
+              <span className="truncate">{item.label}</span>
             </Link>
           );
         })}
       </nav>
+
+      {/* Footer — system status */}
+      <div className="border-t border-border p-3 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+        <div className="flex items-center gap-2">
+          <span className="h-1.5 w-1.5 rounded-full bg-success" aria-hidden />
+          <span>sistema · en línea</span>
+        </div>
+      </div>
     </aside>
   );
 }

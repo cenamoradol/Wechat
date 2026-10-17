@@ -27,7 +27,7 @@ type Message = {
 };
 
 function OutStatus({ status, isRead, onResend }: { status: string | null | undefined; isRead: boolean; onResend?: () => void }) {
-  if (isRead) return <span className="text-sky-300">✓✓</span>;
+  if (isRead) return <span aria-label="leído">✓✓</span>;
   if (status === "failed") {
     return (
       <button
@@ -37,14 +37,14 @@ function OutStatus({ status, isRead, onResend }: { status: string | null | undef
           onResend?.();
         }}
         title="Click para reenviar"
-        className="rounded bg-red-500/20 px-1 text-[10px] font-medium text-red-300 hover:bg-red-500/30"
+        className="rounded bg-destructive/20 px-1 text-[10px] font-medium text-destructive hover:bg-destructive/30"
       >
-        ✕ reenviar
+        reenviar
       </button>
     );
   }
-  if (status === "delivered") return <span>✓✓</span>;
-  return <span>✓</span>;
+  if (status === "delivered") return <span aria-label="entregado">✓✓</span>;
+  return <span aria-label="enviado">✓</span>;
 }
 
 function getSenderLabel(m: Message): string | null {
@@ -81,12 +81,12 @@ function MessageBubble({ message, onResend }: { message: Message; onResend?: (id
         )}
         <div
           className={cn(
-            "rounded-2xl text-sm shadow-sm transition-colors",
+            "rounded-2xl text-sm transition-colors",
             hasMedia ? "p-1" : "px-3 py-2",
             isOut
               ? "rounded-br-sm bg-primary text-primary-foreground"
-              : "rounded-bl-sm bg-background",
-            isUnread && "ring-2 ring-blue-400/70",
+              : "rounded-bl-sm bg-card",
+            isUnread && "ring-2 ring-primary/70",
           )}
         >
           {hasMedia && (

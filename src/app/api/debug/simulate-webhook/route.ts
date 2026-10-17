@@ -52,7 +52,7 @@ export async function POST() {
                   from: "50499999999",
                   timestamp: Math.floor(Date.now() / 1000).toString(),
                   type: "text",
-                  text: { body: "Hola, esto es un mensaje de prueba desde Wechat 🧪" },
+                  text: { body: "Hola, esto es un mensaje de prueba desde Hibox" },
                 },
               ],
             },

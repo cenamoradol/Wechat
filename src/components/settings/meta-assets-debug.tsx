@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Loader2, RefreshCw, Wrench, FlaskConical } from "lucide-react";
+import { Loader2, RefreshCw, Wrench, FlaskConical, ClipboardList } from "lucide-react";
 import { toast } from "sonner";
 
 type DebugData = {
@@ -116,7 +116,7 @@ function SimulateWebhookButton() {
     }
   };
   return (
-    <div className="rounded-md border bg-amber-50 p-3 text-xs space-y-2">
+    <div className="rounded-md border bg-warning/10 p-3 text-xs space-y-2">
       <div className="font-semibold uppercase tracking-wide">Probar webhook</div>
       <p className="text-muted-foreground">
         Simula un mensaje entrante real para verificar que el pipeline completo funciona
@@ -164,7 +164,7 @@ function FixAppAccessButton({ onSuccess }: { onSuccess: () => void }) {
   };
 
   return (
-    <div className="rounded-md border bg-blue-50 p-3 text-xs space-y-2">
+    <div className="rounded-md border bg-primary/10 p-3 text-xs space-y-2">
       <div className="font-semibold uppercase tracking-wide">Arreglar acceso a la app</div>
       <p className="text-muted-foreground">
         Si tu token es de un System User que no aparece en tu UI pero funciona para el WABA,
@@ -195,7 +195,7 @@ function EncryptionStatusPanel({
   return (
     <div
       className={`rounded-md border p-3 text-xs ${
-        ok ? "border-emerald-300 bg-emerald-50" : "border-red-300 bg-red-50"
+        ok ? "border-success/40 bg-success/10" : "border-destructive/40 bg-destructive/10"
       }`}
     >
       <div className="flex items-center justify-between">
@@ -224,7 +224,7 @@ function EncryptionStatusPanel({
             {status.channel.decrypt_ok ? (
               "✅ descifra OK"
             ) : (
-              <span className="text-red-700">❌ {status.channel.decrypt_error}</span>
+              <span className="text-destructive">{status.channel.decrypt_error}</span>
             )}
           </div>
         )}
@@ -255,7 +255,7 @@ function MetaAssetsBody({
   }
 
   if (error) {
-    return <p className="text-sm text-red-600">{error}</p>;
+    return <p className="text-sm text-destructive">{error}</p>;
   }
 
   if (!data) return null;
@@ -357,7 +357,7 @@ function ScopesSection({ scopes }: { scopes: string[] }) {
               key={s}
               className={`rounded px-2 py-0.5 text-xs ${
                 REQUIRED_SCOPES.includes(s)
-                  ? "bg-emerald-100 text-emerald-900"
+                  ? "bg-success/15 text-success"
                   : "bg-muted text-muted-foreground"
               }`}
             >
@@ -410,7 +410,10 @@ function ListSection({
 function Checklist() {
   return (
     <details className="text-xs">
-      <summary className="cursor-pointer font-medium">📋 Checklist si algo falta</summary>
+      <summary className="flex cursor-pointer items-center gap-2 font-medium">
+        <ClipboardList className="h-4 w-4" />
+        Checklist si algo falta
+      </summary>
       <ol className="mt-2 list-decimal space-y-1 pl-5 text-muted-foreground">
         <li>
           Verifica en <strong>business.facebook.com/settings/users</strong> que tu System User tenga{" "}

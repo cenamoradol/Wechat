@@ -1,6 +1,6 @@
-# Wechat
+# Hibox
 
-CRM conversacional multi-canal para **WhatsApp + Facebook Messenger + Instagram DM**, auto-hospedable, multi-equipo, con IA y automatizaciones.
+Bandeja de mensajería con **agentes IA que responden por ti** en WhatsApp + Facebook Messenger + Instagram DM. Auto-hospedable, multi-equipo, sin pagar por asiento. **No es un CRM** — es un inbox con IA.
 
 ## Stack
 
@@ -76,7 +76,7 @@ Ver [`plan.md`](./plan.md) para el plan completo.
 | 0 | Setup inicial | ✅ |
 | 1 | Auth + Workspaces | — |
 | 2 | Canales Meta (WA + FB + IG) | — |
-| 3 | Inbox (bandeja unificada) | — |
+| 3 | Inbox | — |
 | 4 | Contactos + CSV import | — |
 | 5 | Equipo + invitaciones | — |
 | 6 | Automatizaciones + cron | — |
