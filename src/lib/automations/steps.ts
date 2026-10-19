@@ -828,6 +828,9 @@ async function persistOutboundMessage(
     type,
     text,
     sent_by: null,
+    // Attribute the message to the automation that sent it, so the thread shows
+    // a non-human author instead of a bare bubble.
+    sent_by_label: ctx.automation.name,
     status: "sent",
   });
   await admin

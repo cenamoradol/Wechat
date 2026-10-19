@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { Sparkles } from "lucide-react";
 import { createClient } from "@/lib/supabase/browser";
 import { cn } from "@/lib/utils";
 import { markAsReadAction, resendMediaMessageAction } from "@/app/(workspace)/inbox/actions";
@@ -17,6 +18,8 @@ type Message = {
   external_id?: string | null;
   read_at?: string | null;
   sent_by?: string | null;
+  // Non-human author: AI agent name or automation name. See migration 023.
+  sent_by_label?: string | null;
   media_url?: string | null;
   media_mime?: string | null;
   media_filename?: string | null;
@@ -47,11 +50,11 @@ function OutStatus({ status, isRead, onResend }: { status: string | null | undef
   return <span aria-label="enviado">✓</span>;
 }
 
-function getSenderLabel(m: Message): string | null {
+export function getSenderLabel(m: Message): string | null {
   if (m.direction !== "out") return null;
   if (m.profiles?.full_name) return m.profiles.full_name;
   if (m.profiles?.email) return m.profiles.email.split("@")[0];
-  return null;
+  return m.sent_by_label ?? null;
 }
 
 function MessageBubble({ message, onResend }: { message: Message; onResend?: (id: string) => void }) {
@@ -59,6 +62,8 @@ function MessageBubble({ message, onResend }: { message: Message; onResend?: (id
   const isRead = isOut && !!message.read_at;
   const isUnread = !isOut && !message.read_at;
   const senderLabel = getSenderLabel(message);
+  // No sent_by means no human pressed send: AI agent or automation.
+  const isMachineSender = isOut && !message.sent_by && !!message.sent_by_label;
   const senderInitial = senderLabel?.trim().charAt(0).toUpperCase();
   const hasMedia =
     message.media_url != null ||
@@ -73,10 +78,19 @@ function MessageBubble({ message, onResend }: { message: Message; onResend?: (id
       <div className="max-w-[70%]">
         {isOut && senderLabel && (
           <div className="mb-0.5 flex items-center justify-end gap-1.5 text-[10px] text-muted-foreground">
+            {isMachineSender ? (
+              <span
+                className="flex h-4 w-4 items-center justify-center rounded-full bg-secondary/20 text-secondary"
+                aria-label="enviado por IA o automatización"
+              >
+                <Sparkles className="h-2.5 w-2.5" />
+              </span>
+            ) : (
+              <span className="flex h-4 w-4 items-center justify-center rounded-full bg-primary/20 text-[9px] font-bold text-primary">
+                {senderInitial}
+              </span>
+            )}
             <span className="font-medium">{senderLabel}</span>
-            <span className="flex h-4 w-4 items-center justify-center rounded-full bg-primary/20 text-[9px] font-bold text-primary">
-              {senderInitial}
-            </span>
           </div>
         )}
         <div

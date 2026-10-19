@@ -301,6 +301,7 @@ export type Database = {
           error_message: string | null;
           raw_payload: Record<string, unknown> | null;
           sent_by: string | null;
+          sent_by_label: string | null;
           read_at: string | null;
           deleted_at: string | null;
           created_at: string;
@@ -326,6 +327,7 @@ export type Database = {
           error_message?: string | null;
           raw_payload?: Record<string, unknown> | null;
           sent_by?: string | null;
+          sent_by_label?: string | null;
           deleted_at?: string | null;
         };
         Update: Partial<{
@@ -339,6 +341,7 @@ export type Database = {
           text: string | null;
           deleted_at: string | null;
           sent_by: string | null;
+          sent_by_label: string | null;
         }>;
         Relationships: [
           {

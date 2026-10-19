@@ -520,6 +520,40 @@ export async function archiveConversationAction(
 }
 
 /**
+ * Assign a conversation to a teammate, or unassign it with userId = null.
+ * Viewers cannot assign. The target must be a member of the same workspace —
+ * conversations.assigned_to is an unvalidated FK, so we check explicitly.
+ */
+export async function assignConversationAction(
+  conversationId: string,
+  userId: string | null,
+): Promise<ArchiveActionResult> {
+  const ctx = await requireMemberForConversation(conversationId, ["owner", "admin", "agent"]);
+  if ("error" in ctx) return { error: ctx.error };
+
+  const admin = createAdminClient();
+
+  if (userId) {
+    const { data: target } = await admin
+      .from("workspace_members")
+      .select("user_id")
+      .eq("workspace_id", ctx.workspaceId)
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (!target) return { error: "Ese usuario no es miembro del workspace" };
+  }
+
+  const { error } = await admin
+    .from("conversations")
+    .update({ assigned_to: userId })
+    .eq("id", conversationId);
+  if (error) return { error: `No se pudo asignar: ${error.message}` };
+
+  revalidatePath("/inbox");
+  return { ok: true };
+}
+
+/**
  * Unarchive a conversation. Owner/admin only.
  * Media is gone forever (we already deleted it on archive).
  */

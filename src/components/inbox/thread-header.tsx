@@ -1,9 +1,16 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Archive, ArchiveRestore, MoreVertical, Trash2 } from "lucide-react";
+import { Archive, ArchiveRestore, MoreVertical, Sparkles, Trash2, UserRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -21,11 +28,19 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
+import { createClient } from "@/lib/supabase/browser";
 import {
   archiveConversationAction,
   unarchiveConversationAction,
   deleteConversationAction,
+  assignConversationAction,
 } from "@/app/(workspace)/inbox/actions";
+
+type MemberRef = { id: string; full_name: string | null; email: string };
+
+function memberName(m: MemberRef): string {
+  return m.full_name || m.email.split("@")[0];
+}
 
 export function ThreadHeader({
   conversationId,
@@ -33,21 +48,69 @@ export function ThreadHeader({
   channelLabel,
   isArchived,
   userRole,
+  assignedTo,
+  members,
+  autoAgentName,
 }: {
   conversationId: string;
   contactDisplay: string;
   channelLabel: string;
   isArchived: boolean;
   userRole: "owner" | "admin" | "agent" | "viewer";
+  assignedTo: MemberRef | null;
+  members: MemberRef[];
+  /** Name of the workspace's default auto-reply agent, if one is enabled. */
+  autoAgentName: string | null;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [showDelete, setShowDelete] = useState(false);
   const [confirmText, setConfirmText] = useState("");
 
-  // Owner, admin, AND agent can archive/unarchive. Only owner can delete.
+  // Owner, admin, AND agent can archive/unarchive/assign. Only owner can delete.
   const canArchive = userRole === "owner" || userRole === "admin" || userRole === "agent";
   const canDelete = userRole === "owner";
+  const canAssign = canArchive && !isArchived;
+
+  // An automation's assign_to step updates the row server-side. conversations
+  // also fires on every inbound message (last_message_at), so refresh only when
+  // assigned_to actually changed.
+  const assignedRef = useRef(assignedTo?.id ?? null);
+  useEffect(() => {
+    const supabase = createClient();
+    const channel = supabase
+      .channel(`thread:${conversationId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "conversations",
+          filter: `id=eq.${conversationId}`,
+        },
+        (payload) => {
+          const next = (payload.new as { assigned_to?: string | null }).assigned_to ?? null;
+          if (next === assignedRef.current) return;
+          assignedRef.current = next;
+          router.refresh();
+        },
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [conversationId, router]);
+
+  const onAssign = (userId: string) => {
+    startTransition(async () => {
+      const res = await assignConversationAction(conversationId, userId === "none" ? null : userId);
+      if (res.error) {
+        toast.error(res.error);
+        return;
+      }
+      toast.success(userId === "none" ? "Conversación sin asignar" : "Conversación asignada");
+    });
+  };
 
   const onArchiveToggle = () => {
     startTransition(async () => {
@@ -87,7 +150,47 @@ export function ThreadHeader({
           <h2 className="truncate text-sm font-semibold">{contactDisplay}</h2>
           <p className="text-xs text-muted-foreground">{channelLabel}</p>
         </div>
-        {canArchive && (
+
+        <div className="flex shrink-0 items-center gap-2">
+          {autoAgentName && (
+            <span
+              className="hidden items-center gap-1 text-[10px] text-secondary sm:flex"
+              title="Agente IA que responde automáticamente en esta conversación"
+            >
+              <Sparkles className="h-3 w-3" />
+              <span className="max-w-[120px] truncate">{autoAgentName}</span>
+            </span>
+          )}
+
+          {canAssign ? (
+            <Select
+              value={assignedTo?.id ?? "none"}
+              onValueChange={onAssign}
+              disabled={isPending}
+            >
+              <SelectTrigger
+                className="h-7 w-[170px] text-xs"
+                aria-label="Conversación asignada a"
+              >
+                <UserRound className="h-3 w-3 shrink-0 text-muted-foreground" />
+                <SelectValue placeholder="Sin asignar" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Sin asignar</SelectItem>
+                {members.map((m) => (
+                  <SelectItem key={m.id} value={m.id}>
+                    {memberName(m)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ) : (
+            <span className="text-xs text-muted-foreground">
+              {assignedTo ? memberName(assignedTo) : "Sin asignar"}
+            </span>
+          )}
+
+          {canArchive && (
           <Button
             variant="ghost"
             size="icon"
@@ -137,6 +240,7 @@ export function ThreadHeader({
             </DropdownMenuContent>
           </DropdownMenu>
         )}
+        </div>
       </header>
 
       <Dialog open={showDelete} onOpenChange={setShowDelete}>

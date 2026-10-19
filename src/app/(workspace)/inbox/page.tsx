@@ -133,12 +133,15 @@ async function ActiveThread({
   userRole: "owner" | "admin" | "agent" | "viewer";
 }) {
   const adminSupabase = (await import("@/lib/supabase/admin")).createAdminClient();
+  const { getActiveWorkspaceIdAction } = await import("@/app/(workspace)/actions");
+  const workspaceId = await getActiveWorkspaceIdAction();
+  if (!workspaceId) redirect("/onboarding");
 
   // Get conversation detail with contact info
   const { data: conv, error: convErr } = await adminSupabase
     .from("conversations")
     .select(
-      "id, contact_channels(id, external_user_id, contacts(id, full_name, phone_e164, email), channels(id, type, display_name))",
+      "id, assigned_to, contact_channels(id, external_user_id, contacts(id, full_name, phone_e164, email), channels(id, type, display_name))",
     )
     .eq("id", conversationId)
     .single();
@@ -153,13 +156,38 @@ async function ActiveThread({
 
   const { data: messages, error: msgErr } = await adminSupabase
     .from("messages")
-    .select("id, direction, type, text, status, created_at, sent_by, read_at, external_id, media_url, media_mime, media_filename, media_size_bytes, deleted_at, profiles:profiles!messages_sent_by_fkey(full_name, email)")
+    .select("id, direction, type, text, status, created_at, sent_by, sent_by_label, read_at, external_id, media_url, media_mime, media_filename, media_size_bytes, deleted_at, profiles:profiles!messages_sent_by_fkey(full_name, email)")
     .eq("conversation_id", conversationId)
     .is("deleted_at", null)
     .order("created_at", { ascending: true })
     .limit(200);
 
   if (msgErr) console.error("messages query failed", msgErr);
+
+  // Assignees + the auto-reply agent shown in the thread header.
+  const [{ data: memberRows }, { data: autoAgent }] = await Promise.all([
+    adminSupabase
+      .from("workspace_members")
+      .select("user_id, profiles:profiles!workspace_members_user_id_fkey(full_name, email)")
+      .eq("workspace_id", workspaceId),
+    adminSupabase
+      .from("ai_agents")
+      .select("name")
+      .eq("workspace_id", workspaceId)
+      .eq("is_default", true)
+      .eq("auto_reply_enabled", true)
+      .maybeSingle(),
+  ]);
+
+  const members = ((memberRows ?? []) as any[])
+    .map((m) => ({
+      id: m.user_id as string,
+      full_name: m.profiles?.full_name ?? null,
+      email: (m.profiles?.email ?? "") as string,
+    }))
+    .filter((m) => !!m.email);
+  const assignedId = (conv as any)?.assigned_to as string | null;
+  const assignedTo = members.find((m) => m.id === assignedId) ?? null;
 
   // ponytail: storage is private — rewrite any Supabase storage URLs to
   // the auth-checked /api/media proxy.
@@ -187,6 +215,9 @@ async function ActiveThread({
         }`}
         isArchived={isArchived}
         userRole={userRole}
+        assignedTo={assignedTo}
+        members={members}
+        autoAgentName={(autoAgent as any)?.name ?? null}
       />
       {isArchived && (
         <div className="border-b bg-warning/10 px-4 py-2 text-xs text-warning">

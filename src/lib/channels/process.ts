@@ -379,6 +379,7 @@ async function runAutoReply(args: {
     type: "text",
     text: content,
     sent_by: null,
+    sent_by_label: agent.name,
     status: "sent",
   });
   await admin
