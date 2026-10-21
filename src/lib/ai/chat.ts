@@ -65,6 +65,11 @@ export async function generateAgentReply(args: {
       ],
     };
     if (supportsJsonMode) body.response_format = { type: "json_object" };
+    // TEMP DEBUG (to remove after we diagnose) — print exactly what we send
+    // and what the recent-window looks like, so we can verify whether the
+    // last inbound message is inside the chat history the model sees.
+    console.log("[ai-debug] outbound", args.agent.provider, args.agent.model, "messages_sent=", args.messages.length, "last_user=", args.messages.filter((m) => m.role === "user").slice(-2));
+    console.log("[ai-debug] body", JSON.stringify(body).slice(0, 4000));
     const res = await fetch(`${cfg.baseUrl}${path}`, {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
@@ -125,6 +130,36 @@ export async function generateAgentReply(args: {
 
   void touchApiKey(args.agent.workspaceId, args.agent.provider);
   return { content: reply, usage, sources };
+}
+
+/**
+ * Build the recent conversation window the LLM sees. Critical: we want the
+ * LAST N messages, not the FIRST N — taking the first N silently drops the
+ * last inbound the customer just typed whenever the thread is longer than
+ * the limit, which makes the model freestyle a response ("haha", sure").
+ *
+ * If `currentInbound` is provided and isn't already covered by the recent
+ * window (i.e. it's the new message that just arrived), it's appended as a
+ * final user turn so the model always knows what it's supposed to reply to.
+ */
+export function buildChatHistory(
+  rawMsgs: Array<{ direction: "in" | "out"; text: string | null; sent_by?: string | null }>,
+  limit: number,
+  currentInbound?: string | null,
+): AIMessage[] {
+  // Take the LAST `limit` messages.
+  const tail = rawMsgs.length > limit ? rawMsgs.slice(-limit) : rawMsgs.slice();
+  const out: AIMessage[] = tail.map((m) => ({
+    role: m.direction === "in" ? "user" : "assistant",
+    content: m.text ?? "",
+  }));
+  if (currentInbound && currentInbound.trim().length > 0) {
+    const last = tail[tail.length - 1];
+    const alreadyLastInbound =
+      last && last.direction === "in" && (last.text ?? "") === currentInbound;
+    if (!alreadyLastInbound) out.push({ role: "user", content: currentInbound });
+  }
+  return out;
 }
 
 /**

@@ -333,12 +333,14 @@ async function runAutoReply(args: {
     .select("direction, text")
     .eq("conversation_id", args.conversationId)
     .is("deleted_at", null)
-    .order("created_at", { ascending: true })
+    .order("created_at", { ascending: false })
     .limit(20);
-  const chatMessages: Array<{ role: "user" | "assistant"; content: string }> = (msgs ?? []).map((m) => ({
-    role: m.direction === "in" ? "user" : "assistant",
-    content: m.text ?? "",
-  }));
+  const { buildChatHistory } = await import("@/lib/ai/chat");
+  const chatMessages = buildChatHistory(
+    (msgs ?? []) as Array<{ direction: "in" | "out"; text: string | null }>,
+    20,
+    args.messageText, // guaranteed to be the prompt even if the row is outside the window
+  );
 
   const { generateAgentReply } = await import("@/lib/ai/chat");
   const { content } = await generateAgentReply({

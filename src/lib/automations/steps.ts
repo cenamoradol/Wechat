@@ -274,13 +274,22 @@ export async function runStep(step: Step, ctx: RunContext): Promise<unknown> {
         .select("direction, text, sent_by")
         .eq("conversation_id", ctx.conversation.id)
         .is("deleted_at", null)
-        .order("created_at", { ascending: true })
+        .order("created_at", { ascending: false })
         .limit(20);
 
-      const chatMessages: Array<{ role: "user" | "assistant"; content: string }> = (msgs ?? []).map((m) => ({
-        role: m.direction === "in" ? "user" : "assistant",
-        content: m.text ?? "",
-      }));
+      const { buildChatHistory } = await import("@/lib/ai/chat");
+      const chatMessages = buildChatHistory(
+        (msgs ?? []) as Array<{ direction: "in" | "out"; text: string | null }>,
+        20,
+        // ponytail: only message_received carries messageText; branch on
+        // kind so the narrowed type is `string | null`. The `as` cast is
+        // safe because the union explicitly tags kind with the messageText
+        // field; without this switch the discriminated union collapses to
+        // {} | null and the helper signature rejects it.
+        (ctx.triggerData.kind === "message_received"
+          ? ctx.triggerData.messageText
+          : null) as string | null,
+      );
 
       const { shouldHandoff } = await import("@/lib/ai/handoff");
       const recent: Array<{ direction: "in" | "out"; text: string | null; sent_by: string | null }> = (msgs ?? []).map((m) => ({
@@ -501,13 +510,17 @@ Return the JSON object now. No commentary, no markdown, just the JSON.`;
         .select("direction, text, sent_by")
         .eq("conversation_id", ctx.conversation.id)
         .is("deleted_at", null)
-        .order("created_at", { ascending: true })
+        .order("created_at", { ascending: false })
         .limit(20);
 
-      const chatMessages: Array<{ role: "user" | "assistant"; content: string }> = (msgs ?? []).map((m) => ({
-        role: m.direction === "in" ? "user" : "assistant",
-        content: m.text ?? "",
-      }));
+      const { buildChatHistory } = await import("@/lib/ai/chat");
+      const chatMessages = buildChatHistory(
+        (msgs ?? []) as Array<{ direction: "in" | "out"; text: string | null }>,
+        20,
+        (ctx.triggerData.kind === "message_received"
+          ? ctx.triggerData.messageText
+          : null) as string | null,
+      );
 
       const varsSnapshot = JSON.stringify(ctx.vars ?? {}, null, 2);
       // ponytail: include `step.prompt` in the system prompt so the

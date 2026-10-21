@@ -9,10 +9,16 @@ const { generateAgentReplyMock, getAdapterMock, createAdminClientMock, getApiKey
   }),
 );
 
-vi.mock("@/lib/ai/chat", () => ({
-  generateAgentReply: generateAgentReplyMock,
-  classifyMessage: vi.fn(),
-}));
+vi.mock("@/lib/ai/chat", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/ai/chat")>("@/lib/ai/chat");
+  return {
+    generateAgentReply: generateAgentReplyMock,
+    classifyMessage: vi.fn(),
+    // ponytail: re-exported (passthrough) so the steps' real history builder
+    // runs; the bug we just fixed lives here, we don't want to mock it.
+    buildChatHistory: actual.buildChatHistory,
+  };
+});
 vi.mock("@/lib/ai/providers", () => ({
   getApiKey: getApiKeyMock,
   touchApiKey: vi.fn(),
