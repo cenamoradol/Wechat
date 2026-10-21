@@ -207,6 +207,21 @@ function validateOne(step: Step, path: string, issues: ValidationIssue[]): void 
         });
       }
       break;
+    case "auto_assign": {
+      const ids = Array.isArray(step.userIds) ? step.userIds : [];
+      const valid = ids.filter((id) => typeof id === "string" && (id as string).trim() !== "");
+      if (valid.length === 0) {
+        issues.push({ path: `${path}.userIds`, message: "select at least one agent" });
+      }
+      const tpl = step.messageTemplate;
+      if (tpl != null && (typeof tpl !== "string" || tpl.length > 1024)) {
+        issues.push({
+          path: `${path}.messageTemplate`,
+          message: "messageTemplate must be 1024 characters or less",
+        });
+      }
+      break;
+    }
   }
 }
 
