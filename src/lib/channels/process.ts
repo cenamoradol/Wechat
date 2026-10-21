@@ -412,12 +412,27 @@ export async function processOutboundStatuses(
   const admin = createAdminClient();
   for (const s of value.statuses) {
     if (!s.id || !s.status) continue;
-    const ts = s.timestamp
-      ? new Date(typeof s.timestamp === "number" ? s.timestamp * 1000 : s.timestamp)
-      : new Date();
+    // ponytail: Meta sends `timestamp` as epoch seconds (number) for
+    // modern webhooks. Older payloads and some channels send a string ISO.
+    // Guard every branch — a `new Date(undefined).toISOString()` throws
+    // RangeError, which is what was crashing processOutboundStatuses.
+    // Only trust `ts` (and therefore a `read_at`) when the input had a
+    // parsable timestamp — never invent one and stamp it on the message,
+    // because that would lie about when the customer actually read it.
+    let ts: Date | null = null;
+    if (typeof s.timestamp === "number") {
+      // seconds vs ms: anything < 1e12 is clearly epoch seconds (year
+      // 2001 in ms is already 9.79e11); avoid ambiguity after 2286.
+      const ms = s.timestamp < 1e12 ? s.timestamp * 1000 : s.timestamp;
+      const d = new Date(ms);
+      if (!Number.isNaN(d.getTime())) ts = d;
+    } else if (typeof s.timestamp === "string" && s.timestamp.trim() !== "") {
+      const d = new Date(s.timestamp);
+      if (!Number.isNaN(d.getTime())) ts = d;
+    }
     const updates: { status?: string; read_at?: string } = {};
     if (s.status === "read") {
-      updates.read_at = ts.toISOString();
+      if (ts) updates.read_at = ts.toISOString();
       updates.status = "read";
     } else if (s.status === "delivered") {
       updates.status = "delivered";
