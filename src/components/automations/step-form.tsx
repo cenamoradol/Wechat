@@ -356,6 +356,26 @@ export function StepFields({ step, options, onChange }: { step: Step; options: O
               sin asignar (visible en el inbox como "Sin asignar").
             </p>
           </div>
+          <div>
+            <Label>Mensaje al cliente (opcional)</Label>
+            <Textarea
+              rows={3}
+              maxLength={1024}
+              placeholder='Hola, {{agent.name}} te va a atender. ¿En qué te ayudo?'
+              value={step.messageTemplate ?? ""}
+              onChange={(e) =>
+                onChange({
+                  ...step,
+                  messageTemplate: e.target.value === "" ? undefined : e.target.value,
+                })
+              }
+            />
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              Se envía por el canal actual en cuanto se asigna. Usa
+              {" "}<code className="rounded bg-muted px-1">{"{{agent.name}}"}</code>{" "}
+              para el nombre del agente (o el email si no hay nombre).
+            </p>
+          </div>
         </div>
       );
     }

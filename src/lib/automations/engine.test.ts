@@ -32,7 +32,7 @@ vi.mock("@/lib/supabase/admin", () => ({
 // bypasses the vi.mock above and returns the real module.
 const realChatPromise = vi.importActual<typeof import("@/lib/ai/chat")>("@/lib/ai/chat");
 
-import { runStep, pickAutoAssign } from "@/lib/automations/steps";
+import { runStep, pickAutoAssign, renderAutoAssignMessage } from "@/lib/automations/steps";
 import type { RunContext, Step } from "@/lib/automations/types";
 
 const AGENT_ROW = {
@@ -484,6 +484,13 @@ describe("runStep — auto_assign", () => {
         for (const m of ["select", "eq", "in", "update"]) {
           query[m] = vi.fn(() => query);
         }
+        // ponytail: the auto_assign handler now also calls
+        //   from("profiles").select().eq().maybeSingle()
+        // for the post-pick handoff message. Wire maybeSingle so the chain
+        // resolves cleanly when this older test is the only handler exercised.
+        query.maybeSingle = vi.fn(() =>
+          Promise.resolve({ data: null, error: null }),
+        );
         query.then = (onFulfilled: (v: unknown) => unknown) =>
           Promise.resolve({ data: resolvedData, error: null }).then(onFulfilled);
         return query;
@@ -524,6 +531,156 @@ describe("runStep — auto_assign", () => {
       // picks the first of {u3}, so still u3.
       expect(out.assignedTo).toBe("u3");
       expect(lastUpdate).toEqual({ assigned_to: "u3" });
+    } finally {
+      Math.random = realRandom;
+    }
+  });
+});
+
+describe("renderAutoAssignMessage", () => {
+  it("interpolates the agent's full name", () => {
+    expect(
+      renderAutoAssignMessage("Hola {{agent.name}}, te ayudo en un momento.", {
+        name: "Ana López",
+        email: null,
+      }),
+    ).toBe("Hola Ana López, te ayudo en un momento.");
+  });
+
+  it("falls back to the email's local part when there is no name", () => {
+    expect(
+      renderAutoAssignMessage("{{agent.name}} está contigo.", {
+        name: null,
+        email: "carlos@x.com",
+      }),
+    ).toBe("carlos está contigo.");
+  });
+
+  it("renders an empty string when neither name nor email is set", () => {
+    expect(
+      renderAutoAssignMessage("{{agent.name}} te contactará", {
+        name: null,
+        email: null,
+      }),
+    ).toBe(" te contactará");
+  });
+
+  it("ignores tokens other than {{agent.name}}", () => {
+    // Forward-compat hint: today only agent.name is exposed; other tokens are
+    // left in place so the user notices the gap immediately rather than
+    // seeing a silent empty substitution.
+    expect(
+      renderAutoAssignMessage("{{contact.name}} <{{agent.name}}>", {
+        name: "Ana",
+        email: null,
+      }),
+    ).toBe("{{contact.name}} <Ana>");
+  });
+});
+
+describe("runStep — auto_assign with messageTemplate", () => {
+  // ponytail: mirror the send_text test — only verify the adapter was called
+  // with the interpolated text. persistOutboundMessage runs its own
+  // createAdminClient; the same permissive mock handles it.
+  function makeMockWithProfile(profile: { full_name: string | null; email: string } | null) {
+    const from = (table: string) => {
+      const query: Record<string, unknown> & { then?: unknown } = {};
+      let resolvedData: unknown[] | null = null;
+      if (table === "conversations") resolvedData = []; // zero load
+      else if (table === "profiles") resolvedData = profile ? [profile] : [];
+      for (const m of ["select", "eq", "upsert", "insert", "update", "in", "is", "order", "limit"]) {
+        query[m] = vi.fn(() => query);
+      }
+      query.maybeSingle = vi.fn(() => {
+        const item = Array.isArray(resolvedData) ? resolvedData[0] ?? null : null;
+        return Promise.resolve({ data: item, error: null });
+      });
+      query.then = (onFulfilled: (v: unknown) => unknown) =>
+        Promise.resolve({ data: resolvedData, error: null }).then(onFulfilled);
+      return query;
+    };
+    return { from, rpc: vi.fn() };
+  }
+
+  it("sends the templated message with the picked agent's name", async () => {
+    getAdapterMock.mockReturnValue({
+      sendText: vi.fn().mockResolvedValue({ externalId: "wamid.msg1" }),
+      sendMedia: vi.fn(),
+    });
+    createAdminClientMock.mockReturnValue(
+      makeMockWithProfile({ full_name: "Ana López", email: "ana@x.com" }),
+    );
+
+    const realRandom = Math.random;
+    Math.random = () => 0;
+    try {
+      const ctx = makeCtx();
+      const step: Step = {
+        type: "auto_assign",
+        userIds: ["u1", "u2"],
+        messageTemplate: "Hola {{agent.name}}, te atenderemos en breve.",
+      };
+      const out = (await runStep(step, ctx)) as {
+        assignedTo: string | null;
+        messagesSent: number;
+      };
+      expect(out.assignedTo).toBe("u1");
+      expect(out.messagesSent).toBe(1);
+      expect(getAdapterMock().sendText).toHaveBeenCalledWith(
+        expect.objectContaining({
+          text: "Hola Ana López, te atenderemos en breve.",
+          toExternalId: "ext-1",
+        }),
+      );
+    } finally {
+      Math.random = realRandom;
+    }
+  });
+
+  it("falls back to the email local part when the profile has no name", async () => {
+    getAdapterMock.mockReturnValue({
+      sendText: vi.fn().mockResolvedValue({ externalId: "wamid.msg2" }),
+      sendMedia: vi.fn(),
+    });
+    createAdminClientMock.mockReturnValue(
+      makeMockWithProfile({ full_name: null, email: "carlos@x.com" }),
+    );
+
+    const realRandom = Math.random;
+    Math.random = () => 0;
+    try {
+      const ctx = makeCtx();
+      const step: Step = {
+        type: "auto_assign",
+        userIds: ["u1"],
+        messageTemplate: "{{agent.name}} al habla.",
+      };
+      await runStep(step, ctx);
+      expect(getAdapterMock().sendText).toHaveBeenCalledWith(
+        expect.objectContaining({ text: "carlos al habla." }),
+      );
+    } finally {
+      Math.random = realRandom;
+    }
+  });
+
+  it("does not send anything when messageTemplate is empty", async () => {
+    getAdapterMock.mockReturnValue({
+      sendText: vi.fn().mockResolvedValue({ externalId: "wamid.x" }),
+      sendMedia: vi.fn(),
+    });
+    createAdminClientMock.mockReturnValue(
+      makeMockWithProfile({ full_name: "Ana", email: "ana@x.com" }),
+    );
+
+    const realRandom = Math.random;
+    Math.random = () => 0;
+    try {
+      const ctx = makeCtx();
+      const step: Step = { type: "auto_assign", userIds: ["u1"], messageTemplate: "" };
+      const out = (await runStep(step, ctx)) as { messagesSent: number };
+      expect(out.messagesSent).toBe(0);
+      expect(getAdapterMock().sendText).not.toHaveBeenCalled();
     } finally {
       Math.random = realRandom;
     }

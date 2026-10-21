@@ -160,12 +160,45 @@ export async function runStep(step: Step, ctx: RunContext): Promise<unknown> {
         // leave it visible in the inbox as "Sin asignar" than to overload.
         return { assignedTo: null, skipped: "max_load_exceeded" };
       }
+      // Lookup the agent's profile so we can personalize the message. Done
+      // BEFORE the update so a profile-fetch failure aborts cleanly without
+      // leaving the conversation half-assigned. A profile-less userId (legacy
+      // dirties) falls back to a generic greeting rather than skipping the
+      // message.
+      const { data: profile, error: profileErr } = await admin
+        .from("profiles")
+        .select("full_name, email")
+        .eq("id", picked)
+        .maybeSingle();
+      if (profileErr) throw profileErr;
       const { error } = await admin
         .from("conversations")
         .update({ assigned_to: picked })
         .eq("id", ctx.conversation.id);
       if (error) throw error;
-      return { assignedTo: picked };
+
+      // Optional handoff notification. Skip silently if template is empty so
+      // an automation saved with a blank field doesn't accidentally send.
+      let messagesSent = 0;
+      if (step.messageTemplate && step.messageTemplate.trim()) {
+        const text = renderAutoAssignMessage(step.messageTemplate, {
+          name: profile?.full_name ?? null,
+          email: profile?.email ?? null,
+        });
+        if (text.trim()) {
+          const adapter = getAdapter(ctx.channel.type);
+          const res = await adapter.sendText({
+            accessToken: ctx.channel.accessToken,
+            fromExternalId: ctx.channel.externalId,
+            toExternalId: ctx.contactChannel.externalUserId,
+            text,
+          });
+          await persistOutboundMessage(ctx, "text", text, res.externalId);
+          messagesSent = 1;
+        }
+      }
+
+      return { assignedTo: picked, messagesSent };
     }
 
     case "webhook": {
@@ -916,6 +949,20 @@ export function pickAutoAssign(
   }
   const idx = Math.floor(rng() * winners.length);
   return winners[idx] ?? null;
+}
+
+/**
+ * Render the post-assignment notification. The only variable exposed today
+ * is {{agent.name}}, which falls back to the email's local part and finally
+ * to an empty string so the template still reads sanely with an oddly-shaped
+ * profile. Kept as its own function so it tests without mocking anything.
+ */
+export function renderAutoAssignMessage(
+  template: string,
+  agent: { name: string | null; email: string | null },
+): string {
+  const display = agent.name ?? agent.email?.split("@")[0] ?? "";
+  return template.replace(/\{\{\s*agent\.name\s*\}\}/g, display);
 }
 
 // ponytail: tolerant JSON object extraction. Most LLMs return pure JSON,

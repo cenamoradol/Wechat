@@ -28,6 +28,7 @@ const StepSchema: z.ZodType<unknown> = z.lazy(() =>
       type: z.literal("auto_assign"),
       userIds: z.array(z.string().min(1).max(100)).min(1).max(50),
       maxLoadPerAgent: z.number().int().min(0).max(10000).optional(),
+      messageTemplate: z.string().max(1024).optional(),
     }),
     z.object({
       type: z.literal("webhook"),

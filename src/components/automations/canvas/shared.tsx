@@ -148,7 +148,7 @@ export function summarizeStep(step: Step): string {
       return step.userId ? `User: ${truncate(step.userId)}` : "(sin user)";
     case "auto_assign":
       return step.userIds.length
-        ? `Pool: ${step.userIds.length} agente(s)${step.maxLoadPerAgent ? ` · máx ${step.maxLoadPerAgent}` : ""}`
+        ? `Pool: ${step.userIds.length} agente(s)${step.maxLoadPerAgent ? ` · máx ${step.maxLoadPerAgent}` : ""}${step.messageTemplate ? " · con msg" : ""}`
         : "(pool vacío)";
     case "set_status":
       return step.status;

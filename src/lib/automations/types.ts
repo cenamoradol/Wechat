@@ -47,9 +47,13 @@ export type Step =
       // the fewest open/pending conversations. Optional threshold on per-agent
       // load — if every candidate is at/over it, skip the step and leave the
       // conversation unassigned. Picker lives in steps.ts so it's pure + testable.
+      // Optional messageTemplate sends a one-off text right after the
+      // assignment resolves, with {{agent.name}} interpolated to the
+      // winning assignee's profile name (or email local-part).
       type: "auto_assign";
       userIds: string[];
       maxLoadPerAgent?: number;
+      messageTemplate?: string;
     }
   | {
       type: "webhook";
