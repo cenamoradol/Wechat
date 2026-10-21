@@ -43,6 +43,15 @@ export type Step =
   | { type: "set_status"; status: "open" | "pending" | "closed" }
   | { type: "close_conversation" }
   | {
+      // ponytail: pick one assignee from a pool, weighted toward whoever has
+      // the fewest open/pending conversations. Optional threshold on per-agent
+      // load — if every candidate is at/over it, skip the step and leave the
+      // conversation unassigned. Picker lives in steps.ts so it's pure + testable.
+      type: "auto_assign";
+      userIds: string[];
+      maxLoadPerAgent?: number;
+    }
+  | {
       type: "webhook";
       url: string;
       method: "GET" | "POST" | "PUT" | "DELETE";

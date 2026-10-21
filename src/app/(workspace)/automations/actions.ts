@@ -25,6 +25,11 @@ const StepSchema: z.ZodType<unknown> = z.lazy(() =>
     z.object({ type: z.literal("set_status"), status: z.enum(["open", "pending", "closed"]) }),
     z.object({ type: z.literal("close_conversation") }),
     z.object({
+      type: z.literal("auto_assign"),
+      userIds: z.array(z.string().min(1).max(100)).min(1).max(50),
+      maxLoadPerAgent: z.number().int().min(0).max(10000).optional(),
+    }),
+    z.object({
       type: z.literal("webhook"),
       url: z.string().max(2000),
       method: z.enum(["GET", "POST", "PUT", "DELETE"]),

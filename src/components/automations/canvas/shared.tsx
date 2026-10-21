@@ -24,6 +24,7 @@ import {
   Sparkles,
   Tag,
   UserCheck,
+  Users,
   Webhook,
   XCircle,
   type LucideIcon,
@@ -62,6 +63,9 @@ export const NODE_COLORS: Record<AutomationNodeType, NodeColor> = {
   assign_to: { solid: "#38BDF8", soft: "#0E2E3D", ring: "#7DD3FC", text: "#7DD3FC" },
   set_status: { solid: "#A8A29E", soft: "#1F1C19", ring: "#D6D3D1", text: "#D6D3D1" },
   close_conversation: { solid: "#78716C", soft: "#1F1C19", ring: "#A8A29E", text: "#A8A29E" },
+  // ponytail: auto_assign is in the same family as assign_to (flow control)
+  // but uses teal so users can read at a glance which one balances load.
+  auto_assign: { solid: "#14B8A6", soft: "#0E3D38", ring: "#5EEAD4", text: "#CCFBF1" },
   webhook: { solid: "#F59E0B", soft: "#3A2A0E", ring: "#FCD34D", text: "#FCD34D" },
   ai_reply: { solid: "#EC4899", soft: "#3F1428", ring: "#F9A8D4", text: "#FCE7F3" },
   ai_extract: { solid: "#EC4899", soft: "#3F1428", ring: "#F9A8D4", text: "#FCE7F3" },
@@ -84,6 +88,7 @@ export const NODE_META: Record<
   assign_to: { label: "Asignar a", icon: UserCheck, blurb: "Agente específico" },
   set_status: { label: "Estado", icon: CheckSquare, blurb: "open / pending / closed" },
   close_conversation: { label: "Cerrar", icon: XCircle, blurb: "Cerrar conversación" },
+  auto_assign: { label: "Auto-asignar", icon: Users, blurb: "Pool con balance de carga" },
   webhook: { label: "Webhook", icon: Webhook, blurb: "Llamada HTTP" },
   ai_reply: { label: "Respuesta IA", icon: Sparkles, blurb: "IA redacta y envía" },
   ai_extract: { label: "Extraer", icon: Sparkles, blurb: "Extraer datos estructurados" },
@@ -112,6 +117,7 @@ const TYPE_CATEGORY: Record<AutomationNodeType, NodeCategory> = {
   assign_to: "flow",
   set_status: "flow",
   close_conversation: "flow",
+  auto_assign: "flow",
   webhook: "messaging",
   ai_reply: "ai",
   ai_extract: "ai",
@@ -140,6 +146,10 @@ export function summarizeStep(step: Step): string {
       return step.duration;
     case "assign_to":
       return step.userId ? `User: ${truncate(step.userId)}` : "(sin user)";
+    case "auto_assign":
+      return step.userIds.length
+        ? `Pool: ${step.userIds.length} agente(s)${step.maxLoadPerAgent ? ` · máx ${step.maxLoadPerAgent}` : ""}`
+        : "(pool vacío)";
     case "set_status":
       return step.status;
     case "close_conversation":

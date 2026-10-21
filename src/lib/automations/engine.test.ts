@@ -32,7 +32,7 @@ vi.mock("@/lib/supabase/admin", () => ({
 // bypasses the vi.mock above and returns the real module.
 const realChatPromise = vi.importActual<typeof import("@/lib/ai/chat")>("@/lib/ai/chat");
 
-import { runStep } from "@/lib/automations/steps";
+import { runStep, pickAutoAssign } from "@/lib/automations/steps";
 import type { RunContext, Step } from "@/lib/automations/types";
 
 const AGENT_ROW = {
@@ -429,5 +429,103 @@ describe("runStep — llm_draft_message", () => {
     const systemMsg = body.messages.find((m) => m.role === "system");
     expect(systemMsg?.content).toContain("EMPTY_HISTORY_MARKER_abc");
     vi.unstubAllGlobals();
+  });
+});
+
+describe("pickAutoAssign", () => {
+  it("returns null for an empty pool", () => {
+    expect(pickAutoAssign([], {}, 0, () => 0)).toBeNull();
+  });
+
+  it("returns null when the pool is only whitespace", () => {
+    expect(pickAutoAssign(["", "  ", "\t"], {}, 0, () => 0)).toBeNull();
+  });
+
+  it("picks the candidate with the lowest load", () => {
+    const pool = ["u1", "u2", "u3"];
+    const load = { u1: 5, u2: 2, u3: 8 };
+    expect(pickAutoAssign(pool, load, 0, () => 0)).toBe("u2");
+  });
+
+  it("tie-breaks at zero load by walking the pool in order via rng", () => {
+    const pool = ["u1", "u2", "u3"];
+    // rng() = 0.5 → floor(0.5 * 3) = 1 → u2
+    expect(pickAutoAssign(pool, { u1: 0, u2: 0, u3: 0 }, 0, () => 0.5)).toBe("u2");
+    // rng() = 0.99 → floor(0.99 * 3) = 2 → u3
+    expect(pickAutoAssign(pool, { u1: 0, u2: 0, u3: 0 }, 0, () => 0.99)).toBe("u3");
+  });
+
+  it("skips when minLoad meets maxLoadPerAgent threshold", () => {
+    // everyone is at 5; threshold 5 → over/equal → skip
+    expect(pickAutoAssign(["u1", "u2"], { u1: 5, u2: 5 }, 5, () => 0)).toBeNull();
+    // threshold 6 → 5 < 6, so pick someone
+    expect(pickAutoAssign(["u1", "u2"], { u1: 5, u2: 5 }, 6, () => 0)).toBe("u1");
+  });
+
+  it("treats missing keys as zero load", () => {
+    // u1 has a load; u2 has no row at all → u2 still wins
+    expect(pickAutoAssign(["u1", "u2"], { u1: 7 }, 0, () => 0)).toBe("u2");
+  });
+
+  it("threshold of 0 is treated as disabled", () => {
+    // 100 load each would exceed any non-zero threshold; with 0 it picks
+    expect(pickAutoAssign(["u1", "u2"], { u1: 100, u2: 100 }, 0, () => 0)).toBe("u1");
+  });
+});
+
+describe("runStep — auto_assign", () => {
+  // The picker is tested separately. Here we just confirm the handler
+  // writes the picked user id to conversations.assigned_to.
+  function makeAdminAutoMock(loadRows: Array<{ assigned_to: string | null }>) {
+    return {
+      from: (table: string) => {
+        const query: Record<string, unknown> & { then?: unknown } = {};
+        const resolvedData = table === "conversations" ? loadRows : [];
+        for (const m of ["select", "eq", "in", "update"]) {
+          query[m] = vi.fn(() => query);
+        }
+        query.then = (onFulfilled: (v: unknown) => unknown) =>
+          Promise.resolve({ data: resolvedData, error: null }).then(onFulfilled);
+        return query;
+      },
+      rpc: vi.fn(),
+    };
+  }
+
+  it("writes the picked assignee to conversations.assigned_to", async () => {
+    const admin = makeAdminAutoMock([
+      { assigned_to: "u1" },
+      { assigned_to: "u1" },
+      { assigned_to: "u2" },
+    ]);
+    let lastUpdate: Record<string, unknown> | undefined;
+    const originalFrom = admin.from.bind(admin);
+    admin.from = (table: string) => {
+      const q: Record<string, unknown> & { then?: unknown } = originalFrom(table);
+      q.update = vi.fn((payload: Record<string, unknown>) => {
+        if (table === "conversations") lastUpdate = payload;
+        return { eq: vi.fn(() => Promise.resolve({ data: null, error: null })) };
+      });
+      return q;
+    };
+    createAdminClientMock.mockReturnValue(admin);
+
+    const ctx = makeCtx();
+    // Force deterministic pick: rng = 0 → index 0 of winners (the lowest-load).
+    const realRandom = Math.random;
+    Math.random = () => 0;
+    try {
+      const step: Step = {
+        type: "auto_assign",
+        userIds: ["u1", "u2", "u3"],
+      };
+      const out = (await runStep(step, ctx)) as { assignedTo: string | null };
+      // Among u1 (load 2), u2 (load 1), u3 (load 0) → u3 wins. Then Math.random=0
+      // picks the first of {u3}, so still u3.
+      expect(out.assignedTo).toBe("u3");
+      expect(lastUpdate).toEqual({ assigned_to: "u3" });
+    } finally {
+      Math.random = realRandom;
+    }
   });
 });

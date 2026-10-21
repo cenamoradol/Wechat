@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { ChevronDown, ChevronUp, Trash2, AlertCircle, Plus, X, GripVertical, MessageSquare, Tag, Clock, Send, GitBranch, UserCheck, Webhook, Sparkles, FileText, Hash, XCircle, CheckSquare, Image as ImageIcon, Filter, Bot } from "lucide-react";
+import { ChevronDown, ChevronUp, Trash2, AlertCircle, Plus, X, GripVertical, MessageSquare, Tag, Clock, Send, GitBranch, UserCheck, Users, Webhook, Sparkles, FileText, Hash, XCircle, CheckSquare, Image as ImageIcon, Filter, Bot } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -34,6 +34,7 @@ const STEP_ICONS: Record<Step["type"], React.ComponentType<{ className?: string 
   assign_to: UserCheck,
   set_status: CheckSquare,
   close_conversation: XCircle,
+  auto_assign: Users,
   webhook: Webhook,
   ai_reply: Sparkles,
   ai_extract: Sparkles,
@@ -53,6 +54,7 @@ const STEP_LABELS: Record<Step["type"], string> = {
   assign_to: "Asignar a",
   set_status: "Cambiar estado",
   close_conversation: "Cerrar conversación",
+  auto_assign: "Auto-asignar",
   webhook: "Webhook",
   ai_reply: "Respuesta IA",
   ai_extract: "Extraer variables con IA",
@@ -72,6 +74,7 @@ const STEP_DESCRIPTIONS: Record<Step["type"], string> = {
   assign_to: "Agente específico",
   set_status: "open / pending / closed",
   close_conversation: "Cerrar la conversación",
+  auto_assign: "Distribuye entre un pool de agentes por carga",
   webhook: "Llamada HTTP a URL externa",
   ai_reply: "Generar respuesta con IA",
   ai_extract: "Extraer datos estructurados del mensaje",
@@ -269,6 +272,93 @@ export function StepFields({ step, options, onChange }: { step: Step; options: O
           </Select>
         </div>
       );
+
+    case "auto_assign": {
+      const pool = new Set(step.userIds);
+      const toggle = (id: string) => {
+        const next = new Set(pool);
+        if (next.has(id)) next.delete(id);
+        else next.add(id);
+        onChange({ ...step, userIds: Array.from(next) });
+      };
+      return (
+        <div className="space-y-3">
+          <div>
+            <div className="mb-1 flex items-center justify-between">
+              <Label>Pool de agentes</Label>
+              <div className="flex gap-1">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 px-2 text-xs"
+                  onClick={() => onChange({ ...step, userIds: options.members.map((m) => m.id) })}
+                  disabled={step.userIds.length === options.members.length}
+                >
+                  Todos
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 px-2 text-xs"
+                  onClick={() => onChange({ ...step, userIds: [] })}
+                  disabled={step.userIds.length === 0}
+                >
+                  Ninguno
+                </Button>
+              </div>
+            </div>
+            <div className="max-h-44 space-y-1 overflow-y-auto rounded border border-border bg-muted/20 p-2">
+              {options.members.length === 0 && (
+                <p className="px-2 py-1 text-xs text-muted-foreground">
+                  Este workspace no tiene miembros todavía.
+                </p>
+              )}
+              {options.members.map((m) => (
+                <label
+                  key={m.id}
+                  className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-sm hover:bg-muted/50"
+                >
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 rounded border-border accent-primary"
+                    checked={pool.has(m.id)}
+                    onChange={() => toggle(m.id)}
+                  />
+                  <span className="truncate">{m.full_name || m.email}</span>
+                </label>
+              ))}
+            </div>
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              Seleccionados: {step.userIds.length}. Se reparte por carga (conversaciones
+              abiertas/pendientes) con desempate aleatorio.
+            </p>
+          </div>
+          <div>
+            <Label>Máx. conversaciones por agente (opcional)</Label>
+            <Input
+              type="number"
+              min={0}
+              max={10000}
+              placeholder="Sin límite"
+              value={step.maxLoadPerAgent ?? ""}
+              onChange={(e) => {
+                const raw = e.target.value;
+                if (raw === "") return onChange({ ...step, maxLoadPerAgent: undefined });
+                const n = Number(raw);
+                if (!Number.isFinite(n) || n < 0) return;
+                onChange({ ...step, maxLoadPerAgent: Math.floor(n) });
+              }}
+            />
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              Si todos los agentes ya tienen esta carga o más, la conversación queda
+              sin asignar (visible en el inbox como "Sin asignar").
+            </p>
+          </div>
+        </div>
+      );
+    }
 
     case "set_status":
       return (
@@ -923,6 +1013,7 @@ export function defaultStepFor(t: Step["type"]): Step {
     case "assign_to": return { type: "assign_to", userId: "" };
     case "set_status": return { type: "set_status", status: "open" };
     case "close_conversation": return { type: "close_conversation" };
+    case "auto_assign": return { type: "auto_assign", userIds: [] };
     case "webhook": return { type: "webhook", url: "", method: "POST" };
     case "ai_reply": return { type: "ai_reply", agentId: "" };
     case "ai_extract": return { type: "ai_extract", agentId: "", instruction: "", fields: [] };
@@ -950,6 +1041,8 @@ export function validateStep(s: Step): string | null {
       return /^\d+\s*[smhd]$/i.test(s.duration) ? null : "duración inválida";
     case "assign_to":
       return s.userId ? null : "selecciona agente";
+    case "auto_assign":
+      return s.userIds.length > 0 ? null : "selecciona al menos un agente";
     case "webhook":
       if (!s.url.trim()) return "URL vacía";
       if (!/^https?:\/\//.test(s.url)) return "URL debe empezar con http(s)://";

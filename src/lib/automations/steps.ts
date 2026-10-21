@@ -134,6 +134,40 @@ export async function runStep(step: Step, ctx: RunContext): Promise<unknown> {
       return { status: "closed" };
     }
 
+    case "auto_assign": {
+      const admin = createAdminClient();
+      // De-dupe the pool client-side; zod allows duplicates and whitespace.
+      const userIds = Array.from(
+        new Set(step.userIds.map((s) => s.trim()).filter(Boolean)),
+      );
+      if (userIds.length === 0) {
+        return { assignedTo: null, skipped: "empty_pool" };
+      }
+      const { data: loadRows, error: loadErr } = await admin
+        .from("conversations")
+        .select("assigned_to")
+        .in("assigned_to", userIds)
+        .in("status", ["open", "pending"]);
+      if (loadErr) throw loadErr;
+      const load: Record<string, number> = {};
+      for (const r of loadRows ?? []) {
+        if (!r.assigned_to) continue;
+        load[r.assigned_to] = (load[r.assigned_to] ?? 0) + 1;
+      }
+      const picked = pickAutoAssign(userIds, load, step.maxLoadPerAgent ?? 0, Math.random);
+      if (!picked) {
+        // Pool isn't empty but everyone is at/over the threshold — better to
+        // leave it visible in the inbox as "Sin asignar" than to overload.
+        return { assignedTo: null, skipped: "max_load_exceeded" };
+      }
+      const { error } = await admin
+        .from("conversations")
+        .update({ assigned_to: picked })
+        .eq("id", ctx.conversation.id);
+      if (error) throw error;
+      return { assignedTo: picked };
+    }
+
     case "webhook": {
       const interpolatedUrl = interpolate(step.url, ctx);
       const finalUrl = appendQueryParams(interpolatedUrl, step.queryParams, ctx);
@@ -842,6 +876,46 @@ async function persistOutboundMessage(
 export function decryptChannelToken(blob: string | null | undefined): string {
   if (!blob) throw new Error("Channel access token missing");
   return decrypt(Buffer.from(blob, "base64"));
+}
+
+/**
+ * Pick a user id from `pool`, preferring whoever has the fewest open/pending
+ * conversations per `load`. Tie-breaks with `rng()`. Returns null when:
+ *   - `pool` is empty after dedupe, or
+ *   - `maxLoadPerAgent > 0` and every candidate already has that many open.
+ * `rng` is injected so the engine and tests share one truth.
+ */
+export function pickAutoAssign(
+  pool: string[],
+  load: Record<string, number>,
+  maxLoadPerAgent: number,
+  rng: () => number,
+): string | null {
+  const seen = new Set<string>();
+  const candidates: string[] = [];
+  for (const id of pool) {
+    // ponytail: trim so a stray " " from the canvas doesn't get picked
+    // and fail the FK update later.
+    const trimmed = id?.trim();
+    if (!trimmed || seen.has(trimmed)) continue;
+    seen.add(trimmed);
+    candidates.push(trimmed);
+  }
+  if (candidates.length === 0) return null;
+
+  let minLoad = Infinity;
+  for (const id of candidates) {
+    const l = load[id] ?? 0;
+    if (l < minLoad) minLoad = l;
+  }
+  if (maxLoadPerAgent > 0 && minLoad >= maxLoadPerAgent) return null;
+
+  const winners: string[] = [];
+  for (const id of candidates) {
+    if ((load[id] ?? 0) === minLoad) winners.push(id);
+  }
+  const idx = Math.floor(rng() * winners.length);
+  return winners[idx] ?? null;
 }
 
 // ponytail: tolerant JSON object extraction. Most LLMs return pure JSON,
