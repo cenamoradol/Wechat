@@ -576,7 +576,12 @@ Return the JSON object now. No commentary, no markdown, just the JSON.`;
 
       const trimmed = res.content.trim();
       if (!trimmed) {
-        throw new Error("llm_draft_message produced empty text");
+        // chat.ts already logged finish_reason / reasoning_content. Keep this
+        // message actionable: the usual cause is max_tokens too small for a
+        // reasoning model to finish thinking AND answer.
+        throw new Error(
+          `llm_draft_message produjo texto vacío (revisa max_tokens del agente: ${a.max_tokens}; los modelos de razonamiento lo consumen en thinking)`,
+        );
       }
 
       const adapter = getAdapter(ctx.channel.type);

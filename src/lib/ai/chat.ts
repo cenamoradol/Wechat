@@ -89,6 +89,28 @@ export async function generateAgentReply(args: {
       throw new Error(`minimax ${json.base_resp.status_code}: ${json.base_resp.status_msg}`);
     }
     reply = json.choices[0]?.message?.content ?? "";
+    // ponytail: reasoning models (deepseek-v3.1/v4, o-series) put their
+    // thinking in `reasoning_content` and the answer in `content`. When
+    // max_tokens is too small the budget is burned on thinking, the reply
+    // comes back cut off and content is "" — which used to surface as a
+    // bare "produced empty text" with no clue why.
+    if (!reply.trim()) {
+      const choice = json.choices[0] as {
+        finish_reason?: string;
+        message?: { reasoning_content?: string; reasoning?: string };
+      };
+      const reasoning =
+        choice?.message?.reasoning_content ?? choice?.message?.reasoning ?? "";
+      console.error("[ai] empty completion", {
+        provider: args.agent.provider,
+        model: args.agent.model,
+        finish_reason: choice?.finish_reason,
+        maxTokens: args.agent.maxTokens,
+        tokensOut: json.usage?.completion_tokens ?? 0,
+        reasoningChars: reasoning.length,
+        reasoningTail: reasoning.slice(-300),
+      });
+    }
     usage = {
       tokensIn: json.usage?.prompt_tokens ?? 0,
       tokensOut: json.usage?.completion_tokens ?? 0,
