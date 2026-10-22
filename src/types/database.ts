@@ -243,6 +243,7 @@ export type Database = {
           contact_channel_id: string;
           status: Database["public"]["Enums"]["conversation_status"];
           assigned_to: string | null;
+          assigned_at: string | null;
           last_message_at: string;
           last_message_preview: string | null;
           unread_count: number;
@@ -258,6 +259,7 @@ export type Database = {
           contact_channel_id: string;
           status?: Database["public"]["Enums"]["conversation_status"];
           assigned_to?: string | null;
+          assigned_at?: string | null;
           last_message_at?: string;
           last_message_preview?: string | null;
           unread_count?: number;
@@ -268,6 +270,7 @@ export type Database = {
         Update: Partial<{
           status: Database["public"]["Enums"]["conversation_status"];
           assigned_to: string | null;
+          assigned_at: string | null;
           last_message_at: string;
           last_message_preview: string | null;
           unread_count: number;

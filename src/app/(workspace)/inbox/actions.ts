@@ -545,7 +545,7 @@ export async function assignConversationAction(
 
   const { error } = await admin
     .from("conversations")
-    .update({ assigned_to: userId })
+    .update({ assigned_to: userId, assigned_at: userId ? new Date().toISOString() : null })
     .eq("id", conversationId);
   if (error) return { error: `No se pudo asignar: ${error.message}` };
 

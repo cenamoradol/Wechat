@@ -119,7 +119,7 @@ export async function runStep(step: Step, ctx: RunContext): Promise<unknown> {
       const admin = createAdminClient();
       const { error } = await admin
         .from("conversations")
-        .update({ assigned_to: step.userId })
+        .update({ assigned_to: step.userId, assigned_at: new Date().toISOString() })
         .eq("id", ctx.conversation.id);
       if (error) throw error;
       return { assignedTo: step.userId };
@@ -184,7 +184,7 @@ export async function runStep(step: Step, ctx: RunContext): Promise<unknown> {
       if (profileErr) throw profileErr;
       const { error } = await admin
         .from("conversations")
-        .update({ assigned_to: picked })
+        .update({ assigned_to: picked, assigned_at: new Date().toISOString() })
         .eq("id", ctx.conversation.id);
       if (error) throw error;
 

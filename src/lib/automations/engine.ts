@@ -39,6 +39,26 @@ export type TriggerDispatchResult = {
  */
 export async function evaluateTriggers(event: TriggerEvent): Promise<TriggerDispatchResult> {
   const admin = createAdminClient();
+
+  // A conversation handed to a human is on-hold: no automation runs. The hold
+  // expires after AI_HOLD_MS so a customer who writes again later still gets
+  // an answer. Checked before the (paid) listing query so we don't even load
+  // the automations. Only conversation-scoped events can be on-hold — a
+  // tag_added/contact_created event has no conversation to check.
+  const scopedConversationId =
+    event.kind === "message_received" || event.kind === "message_unanswered"
+      ? event.conversationId
+      : null;
+  if (scopedConversationId) {
+    const { isAiOnHold } = await import("@/lib/channels/assignment");
+    if (await isAiOnHold(scopedConversationId)) {
+      console.log(
+        `[evaluateTriggers] conversation=${scopedConversationId} on hold (human assigned) — no automations run`,
+      );
+      return { matched: 0, messagesSent: 0 };
+    }
+  }
+
   const { data: automations, error } = await admin
     .from("automations")
     .select("id, name, workspace_id, trigger, steps")

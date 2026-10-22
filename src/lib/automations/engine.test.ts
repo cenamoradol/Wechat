@@ -567,7 +567,11 @@ describe("runStep — auto_assign", () => {
       // Among u1 (load 2), u2 (load 1), u3 (load 0) → u3 wins. Then Math.random=0
       // picks the first of {u3}, so still u3.
       expect(out.assignedTo).toBe("u3");
-      expect(lastUpdate).toEqual({ assigned_to: "u3" });
+      // assigned_at is stamped so the AI hold can expire on its own.
+      expect(lastUpdate).toEqual({
+        assigned_to: "u3",
+        assigned_at: expect.any(String),
+      });
     } finally {
       Math.random = realRandom;
     }

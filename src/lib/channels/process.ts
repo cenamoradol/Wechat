@@ -100,7 +100,7 @@ export async function processInbound(m: NormalizedMessage): Promise<void> {
   const preview = (m.text ?? `[${m.type}]`).slice(0, 200);
   const { data: existing } = await admin
     .from("conversations")
-    .select("last_message_at, assigned_to")
+    .select("last_message_at, assigned_to, assigned_at")
     .eq("contact_channel_id", cc.id)
     .maybeSingle();
   const newerThanLast = !existing?.last_message_at ||
@@ -123,7 +123,7 @@ export async function processInbound(m: NormalizedMessage): Promise<void> {
   const { data: conv, error: convErr } = await admin
     .from("conversations")
     .upsert(convFields, { onConflict: "contact_channel_id" })
-    .select("id, archived_at, assigned_to")
+    .select("id, archived_at, assigned_to, assigned_at")
     .single();
   if (convErr || !conv) {
     console.error("conversation upsert failed", convErr);
@@ -262,6 +262,19 @@ export async function processInbound(m: NormalizedMessage): Promise<void> {
   // 8. AI auto-reply. Only runs when no automation handled the message.
   // fire-and-forget — webhook has no time to wait, and the customer
   // sees the agent's reply in the inbox as soon as it's sent.
+  // ponytail: the hold check happens BEFORE decrypting the channel token —
+  // a conversation owned by a human must not spend CPU on AES (nor throw on
+  // a malformed token) just to bail out one line later. isAiOnHold also
+  // clears the assignment once it expires, so a returning customer is
+  // answered again instead of facing silence.
+  const { isAiOnHold } = await import("@/lib/channels/assignment");
+  if (await isAiOnHold(conv.id)) {
+    console.log(
+      `[processInbound] conversation=${conv.id} on hold (human assigned) — AI stays silent`,
+    );
+    return;
+  }
+
   void runAutoReply({
     conversationId: conv.id,
     workspaceId: channel.workspace_id,
@@ -274,6 +287,8 @@ export async function processInbound(m: NormalizedMessage): Promise<void> {
       : null,
     contactExternalId: m.contactExternalId,
     messageText: m.text ?? null,
+    assignedTo: conv.assigned_to ?? null,
+    assignedAt: conv.assigned_at ?? null,
   }).catch((e) => console.error("auto-reply failed", e));
 }
 
@@ -293,8 +308,22 @@ async function runAutoReply(args: {
   accessToken: string | null;
   contactExternalId: string;
   messageText: string | null;
+  /** Human currently assigned to the conversation, if any. */
+  assignedTo: string | null;
+  /** When that assignment was made; null for legacy rows. */
+  assignedAt: string | null;
 }): Promise<void> {
   const admin = createAdminClient();
+
+  // ponytail: defense in depth. processInbound already gates on isAiOnHold
+  // before calling us; this keeps a direct call from answering a held
+  // conversation. Uses the same expiry rule so the two can't disagree.
+  const { isHoldActive } = await import("@/lib/channels/assignment");
+  if (isHoldActive({ assigned_to: args.assignedTo, assigned_at: args.assignedAt })) {
+    console.log(`[auto-reply] conversation held by ${args.assignedTo} — AI stays silent`);
+    return;
+  }
+
   const { data: agent } = await admin
     .from("ai_agents")
     .select("id, name, description, provider, model, system_prompt, temperature, max_tokens, kb_enabled, auto_reply_enabled, max_replies_per_conversation, handoff_keywords, is_default, workspace_id, created_at, updated_at")
