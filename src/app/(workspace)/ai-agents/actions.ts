@@ -93,9 +93,41 @@ export async function getAgentAction(id: string): Promise<{
   return { data: data as never };
 }
 
+/**
+ * ponytail: "Datos inválidos" sent the user hunting — a max_tokens of 9000
+ * and an empty temperature both produced the same useless toast. Name the
+ * offending field and echo the limit that rejected it.
+ */
+function describeZodError(error: z.ZodError): string {
+  const labels: Record<string, string> = {
+    max_tokens: "Max tokens",
+    temperature: "Temperature",
+    model: "Modelo",
+    system_prompt: "Prompt del sistema",
+    name: "Nombre",
+    provider: "Proveedor",
+    max_replies_per_conversation: "Máx. respuestas",
+    handoff_keywords: "Palabras de handoff",
+  };
+  const first = error.issues[0] as
+    | { path: PropertyKey[]; message: string; code?: string; maximum?: number; minimum?: number }
+    | undefined;
+  if (!first) return "Datos inválidos";
+  const label = labels[String(first.path[0])] ?? String(first.path[0] ?? "datos");
+  const max =
+    first.code === "too_big" && first.maximum != null
+      ? ` (máx ${first.maximum.toLocaleString("es")})`
+      : "";
+  const min =
+    first.code === "too_small" && first.minimum != null
+      ? ` (mín ${first.minimum.toLocaleString("es")})`
+      : "";
+  return `${label}: ${first.message}${max || min}`;
+}
+
 export async function createAgentAction(input: AgentFormData): Promise<{ id?: string; error?: string }> {
   const parsed = AgentSchema.safeParse(input);
-  if (!parsed.success) return { error: "Datos inválidos" };
+  if (!parsed.success) return { error: describeZodError(parsed.error) };
   const ctx = await requireMember();
   if ("error" in ctx) return { error: ctx.error };
   // Validate API key exists
@@ -126,7 +158,7 @@ export async function createAgentAction(input: AgentFormData): Promise<{ id?: st
 
 export async function updateAgentAction(id: string, input: AgentFormData): Promise<{ ok?: boolean; error?: string }> {
   const parsed = AgentSchema.safeParse(input);
-  if (!parsed.success) return { error: "Datos inválidos" };
+  if (!parsed.success) return { error: describeZodError(parsed.error) };
   const ctx = await requireMember();
   if ("error" in ctx) return { error: ctx.error };
   const admin = createAdminClient();

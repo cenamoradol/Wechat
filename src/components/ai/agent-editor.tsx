@@ -222,9 +222,19 @@ export function AgentEditor({ initial, mode }: Props) {
                   type="number"
                   min={50}
                   max={8192}
+                  step={1}
                   value={data.max_tokens}
-                  onChange={(e) => set("max_tokens", Number(e.target.value))}
+                  onChange={(e) => {
+                    // Empty input would become NaN/0 and trip the server
+                    // schema. Hold the last valid value instead.
+                    const n = Number(e.target.value);
+                    if (Number.isFinite(n) && n >= 0) set("max_tokens", Math.trunc(n));
+                  }}
                 />
+                <p className="text-xs text-muted-foreground">
+                  Entre 50 y 8192. Los modelos de razonamiento (DeepSeek) lo consumen
+                  en pensar antes de responder — con 1024 puede quedar sin respuesta.
+                </p>
               </div>
             </CardContent>
           </Card>
