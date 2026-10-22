@@ -365,15 +365,8 @@ describe("runStep — llm_draft_message", () => {
     vi.unstubAllGlobals();
   });
 
-  it("uses step.prompt as the sole user message when there is no history", async () => {
-    // When msgs query returns [], chatMessages is empty and the
-    // old code path would have used step.prompt as the user message.
-    // After the fix, step.prompt is still in the system prompt and
-    // also as the user message so the LLM has something to respond
-    // to. The system prompt test above already covers the system-
-    // side; here we verify the user-side fallback.
-    const realChat = await realChatPromise;
-    generateAgentReplyMock.mockImplementation(realChat.generateAgentReply);
+  // Shared setup for the two llm_draft_message no-memory tests below.
+  const llmDraft = (() => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
@@ -391,7 +384,6 @@ describe("runStep — llm_draft_message", () => {
         }),
       headers: { get: () => "application/json" },
     } as unknown as Response);
-    vi.stubGlobal("fetch", fetchMock);
 
     const from = (table: string) => {
       let resolvedData: unknown[] | null = null;
@@ -416,6 +408,18 @@ describe("runStep — llm_draft_message", () => {
         Promise.resolve({ data: resolvedData, error: null }).then(onFulfilled);
       return query;
     };
+    return { fetchMock, from };
+  })();
+
+  it("sends ONLY the current inbound, never the draft instruction as a user turn", async () => {
+    // Regression: with no conversation memory, an empty messages[] used to
+    // fall back to [step.prompt] as the user's message, so the model
+    // answered the instruction ("say hi") instead of the customer. The
+    // prompt now lives solely in the system message.
+    const realChat = await realChatPromise;
+    generateAgentReplyMock.mockImplementation(realChat.generateAgentReply);
+    const { fetchMock, from } = llmDraft;
+    vi.stubGlobal("fetch", fetchMock);
     createAdminClientMock.mockReturnValue({ from, rpc: vi.fn() });
 
     const ctx = makeCtx();
@@ -431,9 +435,36 @@ describe("runStep — llm_draft_message", () => {
     };
     const userMsgs = body.messages.filter((m) => m.role === "user");
     expect(userMsgs).toHaveLength(1);
-    expect(userMsgs[0].content).toBe("EMPTY_HISTORY_MARKER_abc say hi");
+    expect(userMsgs[0].content).toBe("Tengo un corolla 2023");
+    expect(userMsgs[0].content).not.toContain("EMPTY_HISTORY_MARKER_abc");
+    // The instruction still reaches the model via the system prompt.
     const systemMsg = body.messages.find((m) => m.role === "system");
     expect(systemMsg?.content).toContain("EMPTY_HISTORY_MARKER_abc");
+    vi.unstubAllGlobals();
+  });
+
+  it("sends no user turn at all when the trigger carries no message text", async () => {
+    const realChat = await realChatPromise;
+    generateAgentReplyMock.mockImplementation(realChat.generateAgentReply);
+    const { fetchMock, from } = llmDraft;
+    vi.stubGlobal("fetch", fetchMock);
+    createAdminClientMock.mockReturnValue({ from, rpc: vi.fn() });
+    // tag_added / schedule triggers have no messageText. The system prompt
+    // alone is a valid request — generateAgentReply puts it at index 0.
+    const ctx = makeCtx({ triggerData: { kind: "tag_added", tagId: "t1" } });
+    const step: Step = {
+      type: "llm_draft_message",
+      agentId: "agent-1",
+      prompt: "PROACTIVE_MARKER xyz",
+    };
+    await runStep(step, ctx);
+
+    const body = JSON.parse((fetchMock.mock.calls[0] as [string, RequestInit])[1].body as string) as {
+      messages: Array<{ role: string; content: string }>;
+    };
+    expect(body.messages.filter((m) => m.role === "user")).toHaveLength(0);
+    expect(body.messages[0].role).toBe("system");
+    expect(body.messages[0].content).toContain("PROACTIVE_MARKER");
     vi.unstubAllGlobals();
   });
 });

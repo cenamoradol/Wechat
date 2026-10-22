@@ -90,23 +90,22 @@ export async function suggestReplyAction(input: {
   const cc = (conv as unknown as { contact_channels: { contacts: { id: string; full_name: string | null; phone_e164: string | null; email: string | null } | null } | null }).contact_channels;
   const contact = cc?.contacts;
 
-  // Take the LAST 20 messages so the model sees recent context, not the
-  // opening of the thread. The last inbound in that window is the question
-  // we want the suggested reply to address.
-  const { data: msgs } = await admin
+  // The suggestion answers the customer's most recent question only — no
+  // conversation memory, same rule as the automations.
+  const lastInboundRes = await admin
     .from("messages")
-    .select("direction, text, sent_by")
+    .select("text")
     .eq("conversation_id", parsed.data.conversationId)
     .is("deleted_at", null)
+    .eq("direction", "in")
     .order("created_at", { ascending: false })
-    .limit(20);
+    .limit(1)
+    .maybeSingle();
 
-  const rawTail = (msgs ?? []) as Array<{ direction: "in" | "out"; text: string | null }>;
-  const tailAsc = rawTail.slice().reverse(); // oldest -> newest for the model
-  const lastInbound = [...rawTail].reverse().find((m) => m.direction === "in")?.text ?? null;
+  const lastInbound = (lastInboundRes as unknown as { text: string | null } | null)?.text ?? null;
 
   const { buildChatHistory } = await import("@/lib/ai/chat");
-  const chatMessages = buildChatHistory(tailAsc, 20, lastInbound);
+  const chatMessages = buildChatHistory([], 0, lastInbound);
 
   // 3. Call LLM
   const agent = {

@@ -327,20 +327,10 @@ async function runAutoReply(args: {
     return;
   }
 
-  // build chat history
-  const { data: msgs } = await admin
-    .from("messages")
-    .select("direction, text")
-    .eq("conversation_id", args.conversationId)
-    .is("deleted_at", null)
-    .order("created_at", { ascending: false })
-    .limit(20);
+  // No conversation memory: the model answers from the system prompt + this
+  // message only. Skip the history query entirely.
   const { buildChatHistory } = await import("@/lib/ai/chat");
-  const chatMessages = buildChatHistory(
-    (msgs ?? []) as Array<{ direction: "in" | "out"; text: string | null }>,
-    20,
-    args.messageText, // guaranteed to be the prompt even if the row is outside the window
-  );
+  const chatMessages = buildChatHistory([], 0, args.messageText);
 
   const { generateAgentReply } = await import("@/lib/ai/chat");
   const { content } = await generateAgentReply({

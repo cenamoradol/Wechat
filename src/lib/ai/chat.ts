@@ -3,6 +3,7 @@
 
 import { getApiKey, touchApiKey, PROVIDER_CONFIG } from "./providers";
 import { searchKnowledge } from "./knowledge";
+import { extractFirstJsonObject } from "@/lib/automations/steps";
 import type { AIAgent, AIMessage, ChatResult, ChatUsage } from "./types";
 
 export function substituteVars(text: string, vars: Record<string, string>): string {
@@ -133,31 +134,39 @@ export async function generateAgentReply(args: {
 }
 
 /**
- * Build the recent conversation window the LLM sees. Critical: we want the
- * LAST N messages, not the FIRST N — taking the first N silently drops the
- * last inbound the customer just typed whenever the thread is longer than
- * the limit, which makes the model freestyle a response ("haha", sure").
+ * Build the message list the LLM sees.
  *
- * If `currentInbound` is provided and isn't already covered by the recent
- * window (i.e. it's the new message that just arrived), it's appended as a
- * final user turn so the model always knows what it's supposed to reply to.
+ * `limit = 0` means NO memory: only the message that just arrived. That's the
+ * default everywhere in this app because the catalog is volatile — a reply the
+ * AI wrote 3 messages ago lists prices that are now stale, and mixing them with
+ * the fresh webhook payload makes the model quote dead inventory. Each message
+ * is answered from (system prompt + current message + current vars) only.
+ *
+ * `limit > 0` keeps the LAST N messages (not the first N — taking the first N
+ * silently drops the newest question in long threads). Only used if someone
+ * explicitly opts back into conversation memory.
  */
 export function buildChatHistory(
   rawMsgs: Array<{ direction: "in" | "out"; text: string | null; sent_by?: string | null }>,
   limit: number,
   currentInbound?: string | null,
 ): AIMessage[] {
-  // Take the LAST `limit` messages.
+  const inbound = currentInbound?.trim() ? currentInbound : null;
+  // ponytail: no-memory mode. The system prompt already occupies slot 0 of the
+  // provider request (see generateAgentReply), so returning [] here still sends
+  // a valid messages array — we never end up with an empty one.
+  if (limit <= 0) return inbound ? [{ role: "user", content: inbound }] : [];
+
   const tail = rawMsgs.length > limit ? rawMsgs.slice(-limit) : rawMsgs.slice();
   const out: AIMessage[] = tail.map((m) => ({
     role: m.direction === "in" ? "user" : "assistant",
     content: m.text ?? "",
   }));
-  if (currentInbound && currentInbound.trim().length > 0) {
+  if (inbound) {
     const last = tail[tail.length - 1];
     const alreadyLastInbound =
-      last && last.direction === "in" && (last.text ?? "") === currentInbound;
-    if (!alreadyLastInbound) out.push({ role: "user", content: currentInbound });
+      last && last.direction === "in" && (last.text ?? "") === inbound;
+    if (!alreadyLastInbound) out.push({ role: "user", content: inbound });
   }
   return out;
 }
@@ -246,10 +255,29 @@ Mensaje del usuario: """${args.messageText}"""
     text = textBlock?.text ?? "";
   }
 
-  const m = text.match(/\{[\s\S]*\}/);
-  if (!m) return { matches: false, reasoning: `no JSON: ${text.slice(0, 100)}` };
+  // TEMP DEBUG (remove once ai_classify is confirmed) — every classification
+  // decision, so we can see which automation matched which inbound and why
+  // the handoff one didn't fire.
+  console.log(
+    "[ai-debug] classify",
+    JSON.stringify({
+      criteria: args.criteria.slice(0, 90),
+      message: args.messageText.slice(0, 90),
+      raw: text.slice(0, 200),
+    }),
+  );
+
+  // ponytail: reuse the tolerant extractor from steps.ts. The old greedy
+  // regex /\{[\s\S]*\}/ matched from the first "{" to the LAST "}", so any
+  // trailing text containing "}" made JSON.parse throw and the caller
+  // silently read the classification as matches:false — a lost handoff with
+  // no error anywhere.
+  const candidate = extractFirstJsonObject(text);
+  if (!candidate.includes("{")) {
+    return { matches: false, reasoning: `no JSON: ${text.slice(0, 100)}` };
+  }
   try {
-    const j = JSON.parse(m[0]) as { matches?: boolean; reasoning?: string };
+    const j = JSON.parse(candidate) as { matches?: boolean; reasoning?: string };
     return {
       matches: j.matches === true,
       reasoning: j.reasoning ?? "",
