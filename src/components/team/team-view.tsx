@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Mail, Trash2, Copy, Check } from "lucide-react";
+import { Mail, Trash2, Copy, Check, UserPlus, Pencil, KeyRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -27,6 +27,10 @@ import {
   revokeInviteAction,
   removeMemberAction,
 } from "@/app/(workspace)/actions";
+import {
+  createUserAction,
+  updateMemberCredentialsAction,
+} from "@/app/(workspace)/team/actions";
 import { toast } from "sonner";
 
 type Member = {
@@ -97,6 +101,94 @@ export function TeamView({
     setTimeout(() => setCopied(false), 2000);
   };
 
+  // --- Nuevo usuario con acceso directo (sin confirmación por email) ---
+  const [showCreate, setShowCreate] = useState(false);
+  const [newEmail, setNewEmail] = useState("");
+  const [newName, setNewName] = useState("");
+  const [newRole, setNewRole] = useState<"admin" | "agent" | "viewer">("agent");
+  const [newPassword, setNewPassword] = useState("");
+  const [creatingUser, setCreatingUser] = useState(false);
+  const [newUserResult, setNewUserResult] = useState<{ email: string; password: string; created: boolean } | null>(null);
+  const [credsCopied, setCredsCopied] = useState(false);
+
+  const onGeneratePassword = () => {
+    // Client-side generation is fine here: it never leaves the browser until
+    // the admin submits the form, and it's shown back for them to hand over.
+    const alphabet = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    const buf = new Uint8Array(16);
+    crypto.getRandomValues(buf);
+    let out = "";
+    for (const b of buf) out += alphabet[b % alphabet.length];
+    if (!/[A-Z]/.test(out)) out = "A" + out.slice(0, 15);
+    if (!/[0-9]/.test(out)) out = out.slice(0, 15) + "7";
+    setNewPassword(out);
+  };
+
+  const onCreateUser = () => {
+    if (creatingUser) return;
+    setCreatingUser(true);
+    createUserAction({
+      email: newEmail.trim(),
+      password: newPassword,
+      fullName: newName.trim() || undefined,
+      role: newRole,
+    }).then((res) => {
+      setCreatingUser(false);
+      if (res.error) {
+        toast.error(res.error);
+        return;
+      }
+      // Keep the credentials on screen so the admin can copy them before
+      // closing — we never store the password.
+      setNewUserResult({ email: res.email ?? newEmail.trim(), password: newPassword, created: res.created ?? true });
+      setNewEmail("");
+      setNewName("");
+      setNewPassword("");
+      setShowCreate(false);
+      toast.success(res.created ? "Usuario creado" : "Ya existía; agregado al workspace");
+    });
+  };
+
+  const onCopyCreds = async () => {
+    if (!newUserResult) return;
+    await navigator.clipboard.writeText(
+      `Email: ${newUserResult.email}\nContraseña: ${newUserResult.password}`,
+    );
+    setCredsCopied(true);
+    setTimeout(() => setCredsCopied(false), 2000);
+  };
+
+  // --- Editar credenciales de un miembro ---
+  const [editing, setEditing] = useState<Member | null>(null);
+  const [editEmail, setEditEmail] = useState("");
+  const [editPassword, setEditPassword] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
+
+  const onOpenEdit = (m: Member) => {
+    setEditing(m);
+    setEditEmail(m.email);
+    setEditPassword("");
+  };
+
+  const onSaveEdit = () => {
+    if (!editing) return;
+    setSavingEdit(true);
+    const emailChanged = editEmail.trim().toLowerCase() !== editing.email.toLowerCase();
+    updateMemberCredentialsAction({
+      userId: editing.user_id,
+      ...(emailChanged ? { email: editEmail.trim() } : {}),
+      ...(editPassword ? { password: editPassword } : {}),
+    }).then((res) => {
+      setSavingEdit(false);
+      if (res.error) {
+        toast.error(res.error);
+        return;
+      }
+      toast.success("Credenciales actualizadas");
+      setEditing(null);
+    });
+  };
+
   const onRevoke = (inviteId: string) => {
     startTransition(async () => {
       const res = await revokeInviteAction(inviteId);
@@ -165,14 +257,24 @@ export function TeamView({
                   </td>
                   <td className="px-4 py-3 text-right">
                     {isManager && (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        title={m.user_id === currentUserId ? "Salir" : "Eliminar"}
-                        onClick={() => onRemove(m.id, m.user_id === currentUserId)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                      <div className="flex justify-end gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          title="Editar email y contraseña"
+                          onClick={() => onOpenEdit(m)}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          title={m.user_id === currentUserId ? "Salir" : "Eliminar"}
+                          onClick={() => onRemove(m.id, m.user_id === currentUserId)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
                     )}
                   </td>
                 </tr>
@@ -254,6 +356,153 @@ export function TeamView({
               </p>
             </div>
           )}
+
+          {/* Credenciales del usuario recién creado — se muestran una sola vez */}
+          {newUserResult && (
+            <div className="rounded-lg border border-success/40 bg-success/10 p-4 text-sm">
+              <p className="mb-2 font-medium text-success">
+                {newUserResult.created ? "Usuario creado" : "Usuario ya existía y fue agregado"}
+              </p>
+              <p className="mb-2 text-xs text-muted-foreground">
+                Compartí estas credenciales. La contraseña no se vuelve a mostrar.
+              </p>
+              <div className="space-y-1 rounded bg-background p-2 font-mono text-xs">
+                <div>Email: {newUserResult.email}</div>
+                <div>Contraseña: {newUserResult.password}</div>
+              </div>
+              <div className="mt-2 flex gap-2">
+                <Button onClick={onCopyCreds} variant="outline" size="sm">
+                  {credsCopied ? <Check className="mr-2 h-4 w-4" /> : <Copy className="mr-2 h-4 w-4" />}
+                  Copiar credenciales
+                </Button>
+                <Button onClick={() => setNewUserResult(null)} variant="ghost" size="sm">
+                  Ya las copié
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Crear acceso directo, sin confirmación por email */}
+          <Dialog open={showCreate} onOpenChange={setShowCreate}>
+            <DialogTrigger asChild>
+              <Button variant="outline">
+                <UserPlus className="mr-2 h-4 w-4" />
+                Añadir usuario
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Añadir usuario con acceso directo</DialogTitle>
+                <DialogDescription>
+                  Crea la cuenta ya activada — sin email de confirmación. Ideal cuando la
+                  persona no tiene acceso a su correo. Le das las credenciales en mano.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="new-name">Nombre</Label>
+                  <Input
+                    id="new-name"
+                    placeholder="Nombre y apellido"
+                    value={newName}
+                    onChange={(e) => setNewName(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="new-email">Email</Label>
+                  <Input
+                    id="new-email"
+                    type="email"
+                    placeholder="vendedor@empresa.com"
+                    value={newEmail}
+                    onChange={(e) => setNewEmail(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Rol</Label>
+                  <Select value={newRole} onValueChange={(v: string) => setNewRole(v as typeof newRole)}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="admin">Admin</SelectItem>
+                      <SelectItem value="agent">Agente</SelectItem>
+                      <SelectItem value="viewer">Viewer (solo lectura)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="new-password">Contraseña temporal</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      id="new-password"
+                      value={newPassword}
+                      placeholder="Mínimo 8, 1 mayúscula y 1 número"
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      className="font-mono"
+                    />
+                    <Button type="button" variant="outline" onClick={onGeneratePassword}>
+                      <KeyRound className="mr-2 h-4 w-4" />
+                      Generar
+                    </Button>
+                  </div>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="ghost" onClick={() => setShowCreate(false)}>
+                  Cancelar
+                </Button>
+                <Button
+                  onClick={onCreateUser}
+                  disabled={creatingUser || !newEmail.trim() || !newPassword}
+                >
+                  {creatingUser ? "Creando…" : "Crear y activar"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          {/* Editar credenciales de un miembro */}
+          <Dialog open={!!editing} onOpenChange={(open) => !open && setEditing(null)}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Editar acceso</DialogTitle>
+                <DialogDescription>
+                  Corregí el email o restablecé la contraseña de {editing?.full_name ?? editing?.email}.
+                  Deja la contraseña vacía para no cambiarla.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-email">Email</Label>
+                  <Input
+                    id="edit-email"
+                    type="email"
+                    value={editEmail}
+                    onChange={(e) => setEditEmail(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-password">Nueva contraseña (opcional)</Label>
+                  <Input
+                    id="edit-password"
+                    placeholder="Vacío = mantener la actual"
+                    value={editPassword}
+                    onChange={(e) => setEditPassword(e.target.value)}
+                    className="font-mono"
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="ghost" onClick={() => setEditing(null)}>
+                  Cancelar
+                </Button>
+                <Button onClick={onSaveEdit} disabled={savingEdit}>
+                  {savingEdit ? "Guardando…" : "Guardar"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
 
           <div className="overflow-hidden rounded-lg border bg-card">
             {pendingInvites.length === 0 ? (
