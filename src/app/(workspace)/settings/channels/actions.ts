@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getAdapter } from "@/lib/channels";
 import { decrypt, encrypt } from "@/lib/crypto";
+import { requireRowOwnership } from "@/lib/auth/roles";
 
 export type ChannelActionResult = { error?: string; success?: string };
 
@@ -34,13 +35,13 @@ export async function updateChannelTokenAction(
   if (!accessToken || accessToken.length < 20) {
     return { error: "Token inválido" };
   }
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: "Unauthorized" };
+  // Rewriting the Meta token is the most privileged action in the app: it
+  // controls who can message the business's number. Owner/admin only, and the
+  // channel must belong to the caller's active workspace.
+  const ctx = await requireRowOwnership(["owner", "admin"], "channels", channelId);
+  if ("error" in ctx) return { error: ctx.error };
+  const { admin } = ctx;
 
-  const admin = createAdminClient();
   const { data: ch } = await admin
     .from("channels")
     .select("type, external_id")
@@ -75,14 +76,11 @@ export async function updateChannelTokenAction(
 }
 
 export async function deleteChannelAction(channelId: string): Promise<ChannelActionResult> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: "Unauthorized" };
+  // Deleting a channel kills the business's WhatsApp/Messenger line.
+  const ctx = await requireRowOwnership(["owner", "admin"], "channels", channelId);
+  if ("error" in ctx) return { error: ctx.error };
 
-  const admin = createAdminClient();
-  const { error } = await admin.from("channels").delete().eq("id", channelId);
+  const { error } = await ctx.admin.from("channels").delete().eq("id", channelId);
   if (error) return { error: error.message };
 
   revalidatePath("/settings/channels");
@@ -92,11 +90,11 @@ export async function deleteChannelAction(channelId: string): Promise<ChannelAct
 export async function subscribeWebhooksAction(
   channelId: string,
 ): Promise<ChannelActionResult> {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: "Unauthorized" };
+  // Re-subscribing webhooks rewrites Meta-side config; owner/admin only.
+  const ctx = await requireRowOwnership(["owner", "admin"], "channels", channelId);
+  if ("error" in ctx) return { error: ctx.error };
+  const { admin } = ctx;
 
-  const admin = createAdminClient();
   const { data: ch } = await admin
     .from("channels")
     .select("type, access_token_enc, external_id")
@@ -225,7 +223,12 @@ export async function subscribeWebhooksAction(
 }
 
 export async function reVerifyChannelAction(channelId: string): Promise<ChannelActionResult> {
-  const admin = createAdminClient();
+  // This one had no auth check at all — any visitor could trigger a token
+  // probe against another tenant's channel.
+  const ctx = await requireRowOwnership(["owner", "admin"], "channels", channelId);
+  if ("error" in ctx) return { error: ctx.error };
+  const { admin } = ctx;
+
   const { data: ch } = await admin
     .from("channels")
     .select("type, external_id, access_token_enc")

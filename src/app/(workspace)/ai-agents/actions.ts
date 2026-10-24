@@ -8,6 +8,7 @@ import { getActiveWorkspaceIdAction } from "@/app/(workspace)/actions";
 import { generateAgentReply } from "@/lib/ai/chat";
 import { addKBDoc, deleteKBDoc, listKBDocs } from "@/lib/ai/knowledge";
 import { saveApiKey, deleteApiKey, pingProvider, getApiKey } from "@/lib/ai/providers";
+import { requireWorkspaceRole } from "@/lib/auth/roles";
 import type { AIProvider } from "@/lib/ai/types";
 
 // ---------------- AI Agents ----------------
@@ -258,7 +259,9 @@ export async function saveApiKeyAction(
   provider: AIProvider,
   apiKey: string,
 ): Promise<{ error?: string }> {
-  const ctx = await requireMember();
+  // The workspace's API key is the bill. An agent handling conversations must
+  // not be able to swap it for their own account.
+  const ctx = await requireWorkspaceRole(["owner", "admin"]);
   if ("error" in ctx) return { error: ctx.error };
   return saveApiKey(ctx.workspaceId, provider, apiKey);
 }
@@ -266,7 +269,7 @@ export async function saveApiKeyAction(
 export async function deleteApiKeyAction(
   provider: AIProvider,
 ): Promise<{ error?: string }> {
-  const ctx = await requireMember();
+  const ctx = await requireWorkspaceRole(["owner", "admin"]);
   if ("error" in ctx) return { error: ctx.error };
   return deleteApiKey(ctx.workspaceId, provider);
 }

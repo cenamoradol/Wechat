@@ -11,23 +11,33 @@ import {
   Zap,
   Bot,
   Bell,
+  Plug,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import type { WorkspaceRole } from "@/lib/auth/roles";
 
-const nav = [
+// ponytail: hiding admin-only links is UX, not security — the server actions
+// are the real gate. This just stops an agent clicking into a wall of errors.
+const ALL_NAV = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/inbox", label: "Inbox", icon: Inbox },
   { href: "/contacts", label: "Contactos", icon: Contact },
   { href: "/automations", label: "Automatizaciones", icon: Zap },
   { href: "/ai-agents", label: "Agentes IA", icon: Bot },
-  { href: "/team", label: "Equipo", icon: Users },
+  { href: "/team", label: "Equipo", icon: Users, adminOnly: true },
   { href: "/settings/profile", label: "Mi perfil", icon: Settings },
   { href: "/settings/notifications", label: "Notificaciones", icon: Bell },
-  { href: "/settings/workspace", label: "Workspace", icon: Settings },
-];
+  { href: "/settings/channels", label: "Canales", icon: Plug, adminOnly: true },
+  { href: "/settings/workspace", label: "Workspace", icon: Settings, ownerOnly: true },
+] as const;
 
-export function Sidebar() {
+export function Sidebar({ role = "viewer" }: { role?: WorkspaceRole }) {
   const pathname = usePathname();
+  const nav = ALL_NAV.filter((item) => {
+    if ("ownerOnly" in item && item.ownerOnly) return role === "owner";
+    if ("adminOnly" in item && item.adminOnly) return role === "owner" || role === "admin";
+    return true;
+  });
   return (
     <aside className="hidden w-60 shrink-0 border-r border-border bg-surface-container-low md:flex md:flex-col">
       {/* Brand row — terminal header style */}

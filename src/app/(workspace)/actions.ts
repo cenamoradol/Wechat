@@ -7,6 +7,7 @@ import { randomBytes } from "crypto";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { requireWorkspaceRole, type WorkspaceRole } from "@/lib/auth/roles";
 
 export async function signOutAction() {
   const supabase = await createClient();
@@ -103,6 +104,24 @@ export async function createWorkspaceAction(
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Unauthorized" };
+
+  // Creating a workspace mints a new tenant with the caller as owner. Agents
+  // and viewers must not be able to do that — an agent's blast radius is the
+  // workspace they were invited to. Brand-new users with no membership at all
+  // go through /onboarding instead, which is their legitimate entry point.
+  const { data: memberships } = await createAdminClient()
+    .from("workspace_members")
+    .select("role, workspaces!inner(id)")
+    .eq("user_id", user.id)
+    .limit(1);
+  const existingRole = memberships?.[0]?.role as WorkspaceRole | undefined;
+  if (memberships && memberships.length > 0) {
+    if (existingRole !== "owner" && existingRole !== "admin") {
+      return { error: "Solo owners y admins pueden crear workspaces" };
+    }
+  } else {
+    return { error: "Completa el onboarding primero" };
+  }
 
   const admin = createAdminClient();
   const baseSlug = slugify(parsed.data.name);
@@ -291,10 +310,12 @@ export async function acceptInviteAction(token: string): Promise<{
 // Remove a workspace member
 // ------------------------------------------------------------------
 export async function removeMemberAction(memberId: string): Promise<{ error?: string }> {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: "Unauthorized" };
-  const admin = createAdminClient();
+  // Only owner/admin can remove members. This used to check nothing but
+  // "is anyone logged in", so a plain agent could evict the workspace owner.
+  const ctx = await requireWorkspaceRole(["owner", "admin"]);
+  if ("error" in ctx) return { error: ctx.error };
+  const { admin, userId } = ctx;
+
   // Don't let an admin/owner remove themselves if they're the last owner
   const { data: target } = await admin
     .from("workspace_members")
@@ -303,7 +324,15 @@ export async function removeMemberAction(memberId: string): Promise<{ error?: st
     .maybeSingle();
   if (!target) return { error: "Miembro no encontrado" };
 
-  if (target.role === "owner" && target.user_id === user.id) {
+  // An admin must not remove an owner — only an owner can.
+  if (target.role === "owner" && ctx.role !== "owner") {
+    return { error: "Solo un owner puede eliminar a otro owner" };
+  }
+  if (target.workspace_id !== ctx.workspaceId) {
+    return { error: "Ese miembro no pertenece a tu workspace" };
+  }
+
+  if (target.role === "owner" && target.user_id === userId) {
     const { count } = await admin
       .from("workspace_members")
       .select("id", { count: "exact", head: true })

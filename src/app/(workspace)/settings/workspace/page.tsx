@@ -34,6 +34,8 @@ export default async function WorkspaceSettingsPage() {
   ]);
 
   if (!ws) redirect("/onboarding");
+  // Storage quota + workspace identity: owner only (matches the action).
+  if (member?.role !== "owner") redirect("/settings/profile");
 
   const isOwner = member?.role === "owner";
   const limitGB = (ws.storage_limit_bytes ?? 1073741824) / GB;

@@ -20,6 +20,9 @@ export default async function TeamPage() {
     .eq("user_id", user.id)
     .maybeSingle();
   if (!membership) redirect("/onboarding");
+  // Members and invitations are owner/admin territory. The nav link is hidden
+  // for agents, but a typed URL must bounce too.
+  if (!["owner", "admin"].includes(membership.role)) redirect("/inbox");
 
   const admin = createAdminClient();
 

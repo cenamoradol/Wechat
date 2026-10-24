@@ -7,6 +7,7 @@ import {
   listUserWorkspacesAction,
   getActiveWorkspaceIdAction,
 } from "@/app/(workspace)/actions";
+import type { WorkspaceRole } from "@/lib/auth/roles";
 
 export default async function WorkspaceLayout({
   children,
@@ -28,13 +29,22 @@ export default async function WorkspaceLayout({
 
   const memberships = await supabase
     .from("workspace_members")
-    .select("workspace_id")
+    .select("workspace_id, role")
     .eq("user_id", user.id)
     .limit(1);
 
   if (!memberships.data || memberships.data.length === 0) {
     redirect("/onboarding");
   }
+
+  // Role in the ACTIVE workspace, so the nav can hide what this user may not do.
+  const { data: activeMember } = await supabase
+    .from("workspace_members")
+    .select("role")
+    .eq("workspace_id", (await getActiveWorkspaceIdAction()) ?? "")
+    .eq("user_id", user.id)
+    .maybeSingle();
+  const userRole = (activeMember?.role as WorkspaceRole) ?? "viewer";
 
   const [workspaces, activeWorkspaceId] = await Promise.all([
     listUserWorkspacesAction(),
@@ -43,7 +53,7 @@ export default async function WorkspaceLayout({
 
   return (
     <div className="flex h-svh bg-background">
-      <Sidebar />
+      <Sidebar role={userRole} />
       <div className="flex min-w-0 flex-1 flex-col">
         <Topbar
           userName={profile?.full_name ?? undefined}

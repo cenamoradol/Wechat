@@ -45,6 +45,11 @@ export function Topbar({
 
   const active = workspaces.find((w) => w.id === activeWorkspaceId) ?? workspaces[0];
 
+  // Creating a workspace mints a tenant with you as owner — owner/admin only,
+  // matching createWorkspaceAction. Hide it so agents don't discover it by
+  // clicking and bouncing off a toast.
+  const canCreateWorkspace = active?.role === "owner" || active?.role === "admin";
+
   useEffect(() => {
     function handler(e: MouseEvent) {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
@@ -128,25 +133,29 @@ export function Topbar({
                 )}
               </ul>
               <div className="my-1 h-px bg-border" />
-              <button
-                type="button"
-                onClick={() => {
-                  setShowCreate(true);
-                  setOpen(false);
-                }}
-                className="flex w-full items-center gap-2 rounded-sm px-2 py-2 text-left text-sm transition-colors hover:bg-surface-container"
-              >
-                <Plus className="h-4 w-4" />
-                Nuevo workspace para cliente
-              </button>
-              <Link
-                href="/team"
-                onClick={() => setOpen(false)}
-                className="flex items-center gap-2 rounded-sm px-2 py-2 text-sm transition-colors hover:bg-surface-container"
-              >
-                <Users className="h-4 w-4" />
-                Equipo e invitaciones
-              </Link>
+              {canCreateWorkspace && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowCreate(true);
+                    setOpen(false);
+                  }}
+                  className="flex w-full items-center gap-2 rounded-sm px-2 py-2 text-left text-sm transition-colors hover:bg-surface-container"
+                >
+                  <Plus className="h-4 w-4" />
+                  Nuevo workspace para cliente
+                </button>
+              )}
+              {canCreateWorkspace && (
+                <Link
+                  href="/team"
+                  onClick={() => setOpen(false)}
+                  className="flex items-center gap-2 rounded-sm px-2 py-2 text-sm transition-colors hover:bg-surface-container"
+                >
+                  <Users className="h-4 w-4" />
+                  Equipo e invitaciones
+                </Link>
+              )}
               <Link
                 href="/settings"
                 onClick={() => setOpen(false)}

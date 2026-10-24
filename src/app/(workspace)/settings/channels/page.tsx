@@ -9,6 +9,7 @@ import { es } from "date-fns/locale";
 import { ChannelRowActions } from "@/components/settings/channel-row-actions";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { MetaAssetsDebug } from "@/components/settings/meta-assets-debug";
+import { getActiveWorkspaceIdAction } from "@/app/(workspace)/actions";
 
 export default async function ChannelsPage({
   searchParams,
@@ -21,6 +22,20 @@ export default async function ChannelsPage({
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
+
+  // Channel tokens and webhooks control the business's live numbers.
+  const workspaceId = await getActiveWorkspaceIdAction();
+  const { data: channelMember } = workspaceId
+    ? await supabase
+        .from("workspace_members")
+        .select("role")
+        .eq("workspace_id", workspaceId)
+        .eq("user_id", user.id)
+        .maybeSingle()
+    : { data: null };
+  if (!channelMember || !["owner", "admin"].includes(channelMember.role)) {
+    redirect("/inbox");
+  }
 
   const { data: channels } = await supabase
     .from("channels")
