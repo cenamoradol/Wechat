@@ -25,14 +25,14 @@ export default async function ChannelsPage({
 
   // Channel tokens and webhooks control the business's live numbers.
   const workspaceId = await getActiveWorkspaceIdAction();
-  const { data: channelMember } = workspaceId
-    ? await supabase
-        .from("workspace_members")
-        .select("role")
-        .eq("workspace_id", workspaceId)
-        .eq("user_id", user.id)
-        .maybeSingle()
-    : { data: null };
+  if (!workspaceId) redirect("/inbox");
+
+  const { data: channelMember } = await supabase
+    .from("workspace_members")
+    .select("role")
+    .eq("workspace_id", workspaceId)
+    .eq("user_id", user.id)
+    .maybeSingle();
   if (!channelMember || !["owner", "admin"].includes(channelMember.role)) {
     redirect("/inbox");
   }
@@ -40,6 +40,10 @@ export default async function ChannelsPage({
   const { data: channels } = await supabase
     .from("channels")
     .select("id, type, external_id, display_name, status, last_verified_at, created_at, meta")
+    // The channels RLS policy is "any workspace I'm a member of", so without
+    // this filter the page lists EVERY workspace's channels — switching
+    // workspaces looked like it changed nothing.
+    .eq("workspace_id", workspaceId)
     .order("created_at", { ascending: false });
 
   const byType = {

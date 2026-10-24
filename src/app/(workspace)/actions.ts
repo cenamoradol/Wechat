@@ -153,7 +153,7 @@ export async function createWorkspaceAction(
     maxAge: 60 * 60 * 24 * 365,
   });
 
-  revalidatePath("/");
+  revalidatePath("/", "layout");
   return { workspaceId: ws.id };
 }
 
@@ -178,7 +178,10 @@ export async function switchWorkspaceAction(workspaceId: string): Promise<{ erro
     sameSite: "lax",
     maxAge: 60 * 60 * 24 * 365,
   });
-  revalidatePath("/");
+  // "layout", not "/": the active workspace is read by every page under the
+  // workspace layout, and revalidating only "/" leaves the rest cached with
+  // the previous workspace's data.
+  revalidatePath("/", "layout");
   return {};
 }
 
